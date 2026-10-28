@@ -1,0 +1,61 @@
+name: DeckTerm
+options:
+  bundleIdPrefix: dev.cobanov
+  developmentLanguage: tr
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.99.1
+  # The same version herdrchat ships, so both apps run on one tested SSH stack.
+  Citadel:
+    url: https://github.com/orlandos-nl/Citadel
+    exactVersion: 0.12.1
+settings:
+  base:
+    DEVELOPMENT_TEAM: 6U58AKY6F8
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  DeckTerm:
+    type: application
+    platform: iOS
+    sources: [DeckTerm]
+    dependencies:
+      - package: SwiftTerm
+      - package: Citadel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.cobanov.deckterm
+        PRODUCT_NAME: DeckTerm
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: DeckTerm
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        # Landscape only: the phone lies sideways in the lid, and this holds even with rotation lock on.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: DeckTerm, yerel ağdaki sunuculara SSH ile bağlanır.
+  DeckTermTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [DeckTermTests]
+    dependencies:
+      - target: DeckTerm
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: dev.cobanov.deckterm.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/DeckTerm.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeckTerm"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  DeckTerm:
+    build:
+      targets:
+        DeckTerm: all
+        DeckTermTests: [test]
+    test:
+      targets: [DeckTermTests]
