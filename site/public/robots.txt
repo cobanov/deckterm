@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://deckterm.cobanov.dev/sitemap.xml

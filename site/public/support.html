@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support | DeckTerm</title>
+<meta name="description" content="Get help with DeckTerm: setting up servers and SSH keys, keyboard shortcuts, host key warnings, backups, and contact details.">
+<link rel="canonical" href="https://deckterm.cobanov.dev/support">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DeckTerm">
+<meta property="og:title" content="DeckTerm Support">
+<meta property="og:description" content="Get help with DeckTerm: setting up servers and SSH keys, keyboard shortcuts, host key warnings, backups, and contact details.">
+<meta property="og:url" content="https://deckterm.cobanov.dev/support">
+<meta property="og:image" content="https://deckterm.cobanov.dev/img/og.png">
+<meta property="og:image:alt" content="The DeckTerm icon: a green &gt;_ prompt on black.">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="DeckTerm home"><span class="mark" aria-hidden="true">&gt;_</span>DeckTerm</a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/support" aria-current="page">Support</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <article class="prose">
+    <h1>Support</h1>
+    <p class="intro">Answers to common questions about DeckTerm, the SSH terminal for iPhone and hardware keyboards.</p>
+    <div class="contact">
+      <p>Write to <a href="mailto:deckterm@cobanov.dev">deckterm@cobanov.dev</a></p>
+      <p>Bug reports, questions and ideas are all welcome. Mention your iPhone model, iOS version and keyboard if something isn't working.</p>
+    </div>
+
+    <h2 id="setup">How do I add a server?</h2>
+    <ol>
+      <li>Tap the + button on the device list, or press <kbd>⌘N</kbd>.</li>
+      <li>Enter a name, the server's address, the port (22 unless you changed it) and your user name.</li>
+      <li>Choose a password, or use your SSH key (see below).</li>
+      <li>Tap the new card, or press <kbd>⌘1</kbd> for the first device, to connect.</li>
+    </ol>
+    <p>On the first connection DeckTerm remembers the server's host key. See <a href="#host-key">host key warnings</a> for what happens if it changes.</p>
+
+    <h2 id="keys">How do I use an SSH key?</h2>
+    <p>DeckTerm uses one OpenSSH private key for all your devices: ed25519 or RSA, with an optional passphrase. The matching public key must be in <code>~/.ssh/authorized_keys</code> on each server.</p>
+    <ol>
+      <li>If you don't have a key yet, create one on your computer with <code>ssh-keygen -t ed25519</code>, then add it to a server with <code>ssh-copy-id user@server</code>.</li>
+      <li>Copy the private key. On a Mac: <code>pbcopy &lt; ~/.ssh/id_ed25519</code></li>
+      <li>Paste it into DeckTerm, using the key button beside the device list.</li>
+    </ol>
+    <p>The key is stored in the iOS Keychain on this iPhone only, and is never included in backups.</p>
+
+    <h2 id="shortcuts">What are the keyboard shortcuts?</h2>
+    <table class="keys">
+      <caption class="visually-hidden">Keyboard shortcuts</caption>
+      <tbody>
+        <tr><th scope="row"><kbd>⌘1</kbd>–<kbd>⌘9</kbd></th><td>Connect to a saved device</td></tr>
+        <tr><th scope="row"><kbd>⌘N</kbd></th><td>Add a device</td></tr>
+        <tr><th scope="row"><kbd>⌘W</kbd></th><td>Back to the device list</td></tr>
+        <tr><th scope="row"><kbd>⌘=</kbd> <kbd>⌘-</kbd></th><td>Bigger or smaller text</td></tr>
+        <tr><th scope="row"><kbd>⌘,</kbd></th><td>Open the side panel</td></tr>
+      </tbody>
+    </table>
+    <p>You can also swipe in from the left edge to go back to the list, and from the right edge to open the side panel.</p>
+
+    <h2 id="arrows">How does the arrow gesture work?</h2>
+    <p>Hold a finger on the terminal, then slide it up, down, left or right. Each step sends one arrow key, and you feel a light haptic tick for each. It's handy for shell history and menus when your keyboard has no arrow keys.</p>
+
+    <h2 id="on-screen-keyboard">Where is the on-screen keyboard?</h2>
+    <p>It's hidden by default, since your hardware keyboard does the typing. Tap the keyboard button on the key bar under the terminal to show or hide it. The key bar also has esc, tab, ^C, ^D, ^Z, |, ~ and the arrow keys.</p>
+
+    <h2 id="caps-lock">Can Caps Lock work as Control or Escape?</h2>
+    <p>Yes, iOS handles this for any hardware keyboard. Open Settings, then General, Keyboard, Hardware Keyboard, Modifier Keys, and choose what Caps Lock does.</p>
+
+    <h2 id="host-key">It says the host key changed. What should I do?</h2>
+    <p>DeckTerm remembers each server's host key the first time you connect (trust on first use). If the key is different later, it refuses to connect and shows the new SHA256 fingerprint, in the same form as <code>ssh-keygen -lf</code> prints.</p>
+    <ul>
+      <li>If you expected it, for example after reinstalling the server, check the new fingerprint on the server itself, such as with <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code>. If it matches, open the device's edit form, forget the pinned key, and connect again.</li>
+      <li>If you didn't expect it, don't connect. Someone may be intercepting the connection.</li>
+    </ul>
+
+    <h2 id="backup">How do I back up or move my setup?</h2>
+    <p>Open the … menu on the device list and choose Export backup. It holds your devices, pinned host key fingerprints, theme, font and snippets, and you choose where it goes: Files, iCloud Drive, AirDrop and so on. Restore it on any iPhone, including from the first-launch screen.</p>
+    <p>Passwords and the private key are never in the backup, so add them again after restoring.</p>
+
+    <h2 id="keyboards">Which keyboards work?</h2>
+    <p>Any hardware keyboard iOS supports, over Bluetooth or a cable. If yours has no arrow keys or Escape, the key bar under the terminal and the arrow gesture fill in.</p>
+
+    <h2 id="snippets">How do snippets work?</h2>
+    <p>Open the side panel with <kbd>⌘,</kbd> or a swipe from the right edge, then choose Snippets. Tap a snippet to run it. Long-press it to paste the command without running it, or to delete it.</p>
+
+    <h2 id="limits">What can't DeckTerm do yet?</h2>
+    <ul>
+      <li>It runs one session at a time.</li>
+      <li>Leaving the terminal, or iOS suspending the app in the background, ends the session. Use tmux or screen on the server to keep your work running and pick it up again.</li>
+      <li>There is no mosh, SFTP, port forwarding or jump host support yet.</li>
+      <li>It's for iPhone only, in landscape, and needs iOS 17 or later.</li>
+    </ul>
+
+    <h2 id="tips">How do I leave a tip?</h2>
+    <p>Open the … menu, then About. There are three optional tips, Small, Medium and Large, through Apple's In-App Purchase. They unlock nothing; DeckTerm is complete without them.</p>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/terms">Terms</a></li>
+        <li><a href="/security">Security</a></li>
+        <li><a href="/licenses">Licenses</a></li>
+        <li><a href="/support">Support</a></li>
+        <li><a href="mailto:deckterm@cobanov.dev">deckterm@cobanov.dev</a></li>
+      </ul>
+    </nav>
+    <p class="small">© 2026 Mert Cobanov</p>
+    <p class="small">iPhone is a trademark of Apple Inc., registered in the U.S. and other countries.</p>
+  </div>
+</footer>
+</body>
+</html>

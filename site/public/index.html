@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeckTerm: the SSH terminal for your cyberdeck</title>
+<meta name="description" content="DeckTerm is a free SSH terminal for iPhone, built for cyberdecks: an iPhone, any hardware keyboard, held in landscape. Keyboard shortcuts, themes, snippets, and no tracking.">
+<link rel="canonical" href="https://deckterm.cobanov.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DeckTerm">
+<meta property="og:title" content="DeckTerm: the SSH terminal for your cyberdeck">
+<meta property="og:description" content="A free SSH terminal for iPhone and any hardware keyboard, built for landscape and driven from the keyboard.">
+<meta property="og:url" content="https://deckterm.cobanov.dev/">
+<meta property="og:image" content="https://deckterm.cobanov.dev/img/og.png">
+<meta property="og:image:width" content="600">
+<meta property="og:image:height" content="600">
+<meta property="og:image:alt" content="The DeckTerm icon: a green &gt;_ prompt on black.">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/JetBrainsMono-Bold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="DeckTerm home"><span class="mark" aria-hidden="true">&gt;_</span>DeckTerm</a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/support">Support</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero wrap" aria-labelledby="title">
+    <h1 id="title">The SSH terminal <span class="line">for your cyberdeck.<span class="cursor" aria-hidden="true"></span></span></h1>
+    <p class="lede">DeckTerm turns an iPhone and any hardware keyboard into a pocket SSH terminal. Built for landscape, driven from the keyboard.</p>
+    <div class="cta">
+      <p class="soon"><span class="dot" aria-hidden="true"></span>Coming soon to the App Store</p>
+      <a href="/support">Support and questions</a>
+    </div>
+    <p class="req">Free, with an optional tip jar. For iPhone with iOS 17 or later.</p>
+    <figure class="phone">
+      <img src="/img/screen-terminal.png" width="2200" height="1012" fetchpriority="high" alt="DeckTerm in landscape: a shell session fills the screen, with a thin row of keys along the bottom.">
+    </figure>
+  </section>
+
+  <section class="section wrap" aria-labelledby="decks">
+    <div class="section-head">
+      <h2 id="decks">Built for any deck</h2>
+      <p>If there is an iPhone and a hardware keyboard in front of you, it is a deck. A 3D-printed shell, a phone stand behind a mechanical board, a folding travel keyboard: Bluetooth or wired, any keyboard iOS supports. DeckTerm runs in landscape only, the way a deck holds the phone.</p>
+    </div>
+    <div class="decks">
+      <figure>
+        <img src="/img/cyberdeck_render-960.jpg" srcset="/img/cyberdeck_render-960.jpg 960w, /img/cyberdeck_render.jpg 1800w" sizes="(min-width: 46rem) 36rem, 100vw" width="1800" height="1200" loading="lazy" decoding="async" alt="A red and black 3D-printed clamshell deck, open on a wooden table: an iPhone in the lid shows a terminal, a compact keyboard sits in the base.">
+        <figcaption>A 3D-printed clamshell for an iPhone 12 mini and a Torima M7 mini Bluetooth keyboard.</figcaption>
+      </figure>
+      <figure>
+        <img src="/img/slate_hero-960.jpg" srcset="/img/slate_hero-960.jpg 960w, /img/slate_hero.jpg 1800w" sizes="(min-width: 46rem) 36rem, 100vw" width="1800" height="1200" loading="lazy" decoding="async" alt="A flat red one-piece slate on a wooden table, holding an iPhone above a compact keyboard, with a terminal on the screen.">
+        <figcaption>A one-piece slate around the same phone and keyboard.</figcaption>
+      </figure>
+    </div>
+    <p class="aside">These two are the developer's own decks. Yours can be anything.</p>
+  </section>
+
+  <section class="section wrap" aria-labelledby="keyboard">
+    <div class="split">
+      <div>
+        <h2 id="keyboard">Keyboard first</h2>
+        <p class="sub">Your saved devices sit on one screen as cards. Pick one with a shortcut and you are in. Everything you do often has a key.</p>
+        <table class="keys">
+          <caption class="visually-hidden">Keyboard shortcuts</caption>
+          <tbody>
+            <tr><th scope="row"><kbd>⌘1</kbd>–<kbd>⌘9</kbd></th><td>Connect to a saved device</td></tr>
+            <tr><th scope="row"><kbd>⌘N</kbd></th><td>Add a device</td></tr>
+            <tr><th scope="row"><kbd>⌘W</kbd></th><td>Back to the device list</td></tr>
+            <tr><th scope="row"><kbd>⌘=</kbd> <kbd>⌘-</kbd></th><td>Bigger or smaller text</td></tr>
+            <tr><th scope="row"><kbd>⌘,</kbd></th><td>Open the side panel</td></tr>
+          </tbody>
+        </table>
+        <p class="note">Want Caps Lock as Control or Escape? iOS does it: Settings, General, Keyboard, Hardware Keyboard, Modifier Keys.</p>
+      </div>
+      <figure class="phone">
+        <img src="/img/screen-list.png" width="2200" height="1012" loading="lazy" decoding="async" alt="The device list: saved servers shown as cards, each with its address and a ⌘1 to ⌘6 shortcut.">
+      </figure>
+    </div>
+  </section>
+
+  <section class="section wrap" aria-labelledby="touch">
+    <div class="section-head">
+      <h2 id="touch">Touch where it helps</h2>
+      <p>The keyboard does the typing. The screen handles the few things a small keyboard makes awkward.</p>
+    </div>
+    <ul class="trio">
+      <li>
+        <h3>Slide for arrow keys</h3>
+        <p>Hold a finger on the terminal and slide it. Each step sends an arrow key, with a haptic tick so you can feel it.</p>
+      </li>
+      <li>
+        <h3>Swipe from the edges</h3>
+        <p>Swipe in from the left edge to go back to your devices. Swipe in from the right to open the side panel.</p>
+      </li>
+      <li>
+        <h3>Snippets</h3>
+        <p>Save the commands you type every day. Tap one to run it. Long-press to paste it without running, or to delete it.</p>
+      </li>
+    </ul>
+    <figure class="keybar-fig">
+      <ul class="keybar" aria-label="The key bar">
+        <li>esc</li><li>tab</li><li>^C</li><li>^D</li><li>^Z</li><li>|</li><li>~</li>
+        <li aria-label="Left arrow">←</li><li aria-label="Up arrow">↑</li><li aria-label="Down arrow">↓</li><li aria-label="Right arrow">→</li>
+        <li class="push" aria-label="On-screen keyboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M8 14h8"/></svg></li>
+        <li aria-label="Side panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M15 5v14"/></svg></li>
+      </ul>
+      <figcaption>The key bar under the terminal has the keys many compact keyboards lack. The on-screen keyboard stays hidden until you ask for it.</figcaption>
+    </figure>
+  </section>
+
+  <section class="section wrap" aria-labelledby="look">
+    <div class="split">
+      <div>
+        <h2 id="look">Looks like your terminal</h2>
+        <p class="sub">Eleven themes, and the one you pick colors the whole app, not only the terminal.</p>
+        <ul class="themes" aria-label="Themes">
+          <li style="--b:#000000;--f:#E6E6E6">DeckTerm<span aria-hidden="true"><i style="background:#C23621"></i><i style="background:#25BC24"></i><i style="background:#ADAD27"></i><i style="background:#492EE1"></i><i style="background:#D338D3"></i><i style="background:#33BBC8"></i></span></li>
+          <li style="--b:#000000;--f:#4DFF73">Phosphor<span aria-hidden="true"><i style="background:#C23621"></i><i style="background:#25BC24"></i><i style="background:#ADAD27"></i><i style="background:#492EE1"></i><i style="background:#D338D3"></i><i style="background:#33BBC8"></i></span></li>
+          <li style="--b:#000000;--f:#FFB840">Amber<span aria-hidden="true"><i style="background:#C23621"></i><i style="background:#25BC24"></i><i style="background:#ADAD27"></i><i style="background:#492EE1"></i><i style="background:#D338D3"></i><i style="background:#33BBC8"></i></span></li>
+          <li style="--b:#282C34;--f:#ABB2BF">One Dark<span aria-hidden="true"><i style="background:#E06C75"></i><i style="background:#98C379"></i><i style="background:#E5C07B"></i><i style="background:#61AFEF"></i><i style="background:#C678DD"></i><i style="background:#56B6C2"></i></span></li>
+          <li style="--b:#2B2B2B;--f:#A9B7C6">Darcula<span aria-hidden="true"><i style="background:#FF6B68"></i><i style="background:#A8C023"></i><i style="background:#D6BF55"></i><i style="background:#5394EC"></i><i style="background:#AE8ABE"></i><i style="background:#299999"></i></span></li>
+          <li style="--b:#1E1E2E;--f:#CDD6F4">Catppuccin<span aria-hidden="true"><i style="background:#F38BA8"></i><i style="background:#A6E3A1"></i><i style="background:#F9E2AF"></i><i style="background:#89B4FA"></i><i style="background:#F5C2E7"></i><i style="background:#94E2D5"></i></span></li>
+          <li style="--b:#282A36;--f:#F8F8F2">Dracula<span aria-hidden="true"><i style="background:#FF5555"></i><i style="background:#50FA7B"></i><i style="background:#F1FA8C"></i><i style="background:#BD93F9"></i><i style="background:#FF79C6"></i><i style="background:#8BE9FD"></i></span></li>
+          <li style="--b:#282828;--f:#EBDBB2">Gruvbox<span aria-hidden="true"><i style="background:#CC241D"></i><i style="background:#98971A"></i><i style="background:#D79921"></i><i style="background:#458588"></i><i style="background:#B16286"></i><i style="background:#689D6A"></i></span></li>
+          <li style="--b:#2E3440;--f:#D8DEE9">Nord<span aria-hidden="true"><i style="background:#BF616A"></i><i style="background:#A3BE8C"></i><i style="background:#EBCB8B"></i><i style="background:#81A1C1"></i><i style="background:#B48EAD"></i><i style="background:#88C0D0"></i></span></li>
+          <li style="--b:#1A1B26;--f:#C0CAF5">Tokyo Night<span aria-hidden="true"><i style="background:#F7768E"></i><i style="background:#9ECE6A"></i><i style="background:#E0AF68"></i><i style="background:#7AA2F7"></i><i style="background:#BB9AF7"></i><i style="background:#7DCFFF"></i></span></li>
+          <li style="--b:#002B36;--f:#839496">Solarized<span aria-hidden="true"><i style="background:#DC322F"></i><i style="background:#859900"></i><i style="background:#B58900"></i><i style="background:#268BD2"></i><i style="background:#D33682"></i><i style="background:#2AA198"></i></span></li>
+        </ul>
+        <p class="fonts">Five fonts: JetBrains Mono, the default, plus Fira Code, IBM Plex Mono, SF Mono and Menlo. Font, size and theme live under Look in the side panel.</p>
+      </div>
+      <figure class="phone">
+        <img src="/img/screen-panel.png" width="2200" height="1012" loading="lazy" decoding="async" alt="The side panel open beside the terminal, showing the theme picker as a grid of colored cards.">
+      </figure>
+    </div>
+  </section>
+
+  <section class="section wrap" aria-labelledby="private">
+    <div class="section-head">
+      <h2 id="private">Private by design</h2>
+      <p>DeckTerm talks to the SSH servers you add, directly from your phone, and to nothing else.</p>
+    </div>
+    <ul class="facts">
+      <li><strong>No accounts, no tracking</strong><span>No sign-up, analytics, ads or servers of its own. The app collects no personal data.</span></li>
+      <li><strong>Secrets stay on this iPhone</strong><span>Passwords and your private key live in the iOS Keychain, marked this-device-only: not synced to iCloud, not moved to another phone, never in a backup.</span></li>
+      <li><strong>Host keys are pinned</strong><span>The first connection to a server remembers its key. If the key ever changes, DeckTerm refuses to connect and shows you the new fingerprint.</span></li>
+      <li><strong>Password or key</strong><span>Sign in with a password, or with one OpenSSH private key (ed25519 or RSA, passphrase optional) shared by all your devices.</span></li>
+    </ul>
+    <p class="more">Read the <a href="/privacy">privacy policy</a> and the <a href="/security">security model</a>.</p>
+  </section>
+
+  <section class="section wrap" aria-labelledby="tips">
+    <div class="tip">
+      <h2 id="tips">Free, with a tip jar</h2>
+      <p class="sub">DeckTerm is free and nothing in it is locked. If it earns a place on your deck, you can leave a small, medium or large tip under About in the app's … menu.</p>
+      <p>Tips go through Apple's In-App Purchase and unlock nothing. DeckTerm is made by Mert Cobanov, an independent developer.</p>
+    </div>
+  </section>
+
+  <section class="section wrap" aria-labelledby="faq">
+    <h2 id="faq">Questions</h2>
+    <div class="qa">
+      <div>
+        <h3>Which keyboards work?</h3>
+        <p>Any hardware keyboard iOS supports, over Bluetooth or a cable.</p>
+      </div>
+      <div>
+        <h3>Can I keep a session running in the background?</h3>
+        <p>Not yet. Leaving the terminal or iOS suspending the app ends the session, so run tmux or screen on the server to keep your work going.</p>
+      </div>
+      <div>
+        <h3>Does it support mosh, SFTP or port forwarding?</h3>
+        <p>Not yet. DeckTerm runs one SSH session at a time, without mosh, SFTP, port forwarding or jump hosts.</p>
+      </div>
+      <div>
+        <h3>How do I move my setup to a new phone?</h3>
+        <p>Export a backup file from the … menu on the device list, then restore it on the new phone, even from the first-launch screen. Passwords and your key are never in the backup, so add them again.</p>
+      </div>
+    </div>
+    <p class="more">More answers on the <a href="/support">support page</a>.</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/terms">Terms</a></li>
+        <li><a href="/security">Security</a></li>
+        <li><a href="/licenses">Licenses</a></li>
+        <li><a href="/support">Support</a></li>
+        <li><a href="mailto:deckterm@cobanov.dev">deckterm@cobanov.dev</a></li>
+      </ul>
+    </nav>
+    <p class="small">© 2026 Mert Cobanov</p>
+    <p class="small">iPhone is a trademark of Apple Inc., registered in the U.S. and other countries.</p>
+  </div>
+</footer>
+</body>
+</html>
