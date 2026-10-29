@@ -18,7 +18,6 @@ settings:
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0"
-    SWIFT_EMIT_LOC_STRINGS: YES  # lets Xcode keep Localizable.xcstrings in sync with the code
     CURRENT_PROJECT_VERSION: "1"
 targets:
   DeckTerm:

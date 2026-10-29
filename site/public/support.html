@@ -65,7 +65,7 @@
     <table class="keys">
       <caption class="visually-hidden">Keyboard shortcuts</caption>
       <tbody>
-        <tr><th scope="row"><kbd>⌘1</kbd>–<kbd>⌘9</kbd></th><td>Connect to a saved device</td></tr>
+        <tr><th scope="row"><kbd>⌘1</kbd>–<kbd>⌘9</kbd></th><td>Connect to a saved device, or switch to its open session</td></tr>
         <tr><th scope="row"><kbd>⌘N</kbd></th><td>Add a device</td></tr>
         <tr><th scope="row"><kbd>⌘W</kbd></th><td>Back to the device list</td></tr>
         <tr><th scope="row"><kbd>⌘=</kbd> <kbd>⌘-</kbd></th><td>Bigger or smaller text</td></tr>
@@ -73,6 +73,9 @@
       </tbody>
     </table>
     <p>You can also swipe in from the left edge to go back to the list, and from the right edge to open the side panel.</p>
+
+    <h2 id="sessions">Can I keep several sessions open?</h2>
+    <p>Yes. Going back to the device list keeps the session running, and a green dot marks it on its card. Each open session gets a tab on the key bar under the terminal: tap a tab to switch, or hold it to disconnect. <kbd>⌘1</kbd>–<kbd>⌘9</kbd> switch too.</p>
 
     <h2 id="arrows">How does the arrow gesture work?</h2>
     <p>Hold a finger on the terminal, then slide it up, down, left or right. Each step sends one arrow key, and you feel a light haptic tick for each. It's handy for shell history and menus when your keyboard has no arrow keys.</p>
@@ -91,7 +94,7 @@
     </ul>
 
     <h2 id="backup">How do I back up or move my setup?</h2>
-    <p>Open the … menu on the device list and choose Export backup. It holds your devices, pinned host key fingerprints, theme, font and snippets, and you choose where it goes: Files, iCloud Drive, AirDrop and so on. Restore it on any iPhone, including from the first-launch screen.</p>
+    <p>Open the … menu on the device list and choose Export backup. It holds your devices, pinned host key fingerprints, theme, font and snippets, and you choose where it goes: Files, iCloud Drive, AirDrop and so on. Restore it on any iPhone, including from the welcome screen before you add a device.</p>
     <p>Passwords and the private key are never in the backup, so add them again after restoring.</p>
 
     <h2 id="keyboards">Which keyboards work?</h2>
@@ -102,8 +105,7 @@
 
     <h2 id="limits">What can't DeckTerm do yet?</h2>
     <ul>
-      <li>It runs one session at a time.</li>
-      <li>Leaving the terminal, or iOS suspending the app in the background, ends the session. Use tmux or screen on the server to keep your work running and pick it up again.</li>
+      <li>iOS suspends apps in the background, which ends their sessions. Use tmux or screen on the server to keep your work running and pick it up again.</li>
       <li>There is no mosh, SFTP, port forwarding or jump host support yet.</li>
       <li>It's for iPhone only, in landscape, and needs iOS 17 or later.</li>
     </ul>

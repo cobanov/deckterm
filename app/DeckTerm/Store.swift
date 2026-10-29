@@ -9,6 +9,8 @@ struct Server: Codable, Identifiable, Hashable {
     var address = ""
     var port = 22
     var user = ""
+    /// What the host runs, as its logo's asset name ("ubuntu", "macos", "windows"…); learned on each connect.
+    var system: String?
 
     var title: String { name.isEmpty ? address : name }
     /// Host keys are pinned per address, so pointing a server somewhere else starts a fresh pin.
@@ -21,6 +23,23 @@ struct Server: Codable, Identifiable, Hashable {
         server.address = address.trimmingCharacters(in: .whitespacesAndNewlines)
         server.user = user.trimmingCharacters(in: .whitespacesAndNewlines)
         return server.address.isEmpty || server.user.isEmpty || !(1...65535).contains(port) ? nil : server
+    }
+
+    /// os-release IDs that have their own logo, by asset name.
+    private static let distros = ["ubuntu": "ubuntu", "debian": "debian", "raspbian": "raspberrypi", "fedora": "fedora",
+                                  "arch": "archlinux", "alpine": "alpinelinux", "rhel": "redhat", "centos": "centos",
+                                  "linuxmint": "linuxmint", "nixos": "nixos", "kali": "kalilinux", "manjaro": "manjaro",
+                                  "opensuse-leap": "opensuse", "opensuse-tumbleweed": "opensuse", "freebsd": "freebsd"]
+
+    /// The logo for what `uname -s; cat /etc/os-release` printed, or nil when it says nothing known.
+    static func system(from output: String) -> String? {
+        if output.contains("is not recognized") { return "windows" }  // cmd and PowerShell, which have no uname
+        let id = output.split(whereSeparator: \.isNewline).first { $0.hasPrefix("ID=") }
+            .map { $0.dropFirst(3).trimmingCharacters(in: CharacterSet(charactersIn: "\"' ")) }
+        if let id, let logo = distros[id] { return logo }
+        if output.hasPrefix("Darwin") { return "macos" }
+        if output.hasPrefix("FreeBSD") { return "freebsd" }
+        return output.hasPrefix("Linux") ? "linux" : nil
     }
 }
 

@@ -5,6 +5,7 @@ import XCTest
 final class SessionTests: XCTestCase {
     private final class Output: @unchecked Sendable {
         var text = ""
+        var system: String?
         var ended: String??
     }
 
@@ -31,6 +32,11 @@ final class SessionTests: XCTestCase {
                 output.text += String(decoding: bytes, as: UTF8.self)
                 if done(output) { finished.fulfill() }
             }
+        }, detected: { system in
+            DispatchQueue.main.async {
+                output.system = system
+                if done(output) { finished.fulfill() }
+            }
         }, ended: { message in
             DispatchQueue.main.async {
                 output.ended = .some(message)
@@ -44,10 +50,11 @@ final class SessionTests: XCTestCase {
 
     func testShellRunsAndExitsCleanly() {
         // $((6*7)) shows the shell ran the line, not just echoed what was typed.
-        let shell = run(until: { $0.text.contains("deckterm 42") }) {
+        let shell = run(until: { $0.text.contains("deckterm 42") && $0.system != nil }) {
             $0.send(ArraySlice("echo deckterm $((6*7))\r".utf8))
         }
         XCTAssertTrue(shell.text.contains("deckterm 42"), shell.text)
+        XCTAssertEqual(shell.system, "macos", "the Mac's own sshd answers uname with Darwin")
         XCTAssertTrue(Pins.get(server.pinKey)?.hasPrefix("SHA256:") == true)
 
         let exit = run(until: { _ in false }) { $0.send(ArraySlice("exit\r".utf8)) }

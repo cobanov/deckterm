@@ -50,10 +50,11 @@
     <h2 id="on-device">What stays on your phone</h2>
     <p>Everything the app stores is kept on your iPhone:</p>
     <ul>
-      <li>Your saved devices (name, address, port and user name), pinned host key fingerprints, snippets, and your theme and font choices are kept in the app's own storage on the phone.</li>
+      <li>Your saved devices (name, address, port, user name, and which operating system each one runs), pinned host key fingerprints, snippets, and your theme and font choices are kept in the app's own storage on the phone.</li>
       <li>Passwords and your private key are kept in the iOS Keychain, marked this-device-only. They are not synced to iCloud Keychain and are not moved to another phone.</li>
     </ul>
     <p>None of this is sent to the developer or anyone else. The only network connections the app makes are the SSH connections you start, and App Store purchases handled by Apple.</p>
+    <p>To show each device's logo, DeckTerm runs one short command on the server after you connect, <code>uname -s; cat /etc/os-release</code>, and keeps only the name of the system it finds. Like any command, it may appear in the server's own logs.</p>
 
     <h2 id="backups">Backups you make</h2>
     <p>You can export a backup file that holds your devices, pinned host key fingerprints, theme, font and snippets. Passwords and the private key are never included. Exporting is always your decision, and where the file goes (Files, iCloud Drive, AirDrop or anywhere else) is your choice. Once saved there, the file is handled under that service's terms. The developer never receives it.</p>

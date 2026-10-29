@@ -2698,3 +2698,10 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+### Simple Icons 16.30.0 (logos)
+https://github.com/simple-icons/simple-icons
+
+The logos shown for a device's operating system come from Simple Icons, dedicated to the public domain under CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/).
+
+The logos are trademarks of their owners. DeckTerm shows them only to tell which system a device runs, and is not affiliated with or endorsed by any of them. The Windows mark is drawn by DeckTerm, and the Apple logo is the system's own symbol.

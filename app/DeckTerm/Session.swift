@@ -36,9 +36,10 @@ final class Session: @unchecked Sendable {
     }
 
     /// `output` gets the shell's raw bytes. `ended` fires once, off the main thread: nil when the shell
-    /// exited on a live connection (the person typed `exit`), else what went wrong.
+    /// exited on a live connection (the person typed `exit`), else what went wrong. `detected` gets the host's logo name.
     func start(_ server: Server, cols: Int, rows: Int,
                output: @escaping @Sendable (ArraySlice<UInt8>) -> Void,
+               detected: @escaping @Sendable (String) -> Void,
                ended: @escaping @Sendable (String?) -> Void) {
         let events = self.events
         task = Task {
@@ -56,6 +57,7 @@ final class Session: @unchecked Sendable {
                 )
                 settings.group = group
                 let client = try await SSHClient.connect(to: settings)
+                Task { if let system = await Self.system(of: client) { detected(system) } }
                 let pty = SSHChannelRequestEvent.PseudoTerminalRequest(
                     wantReply: true,
                     term: "xterm-256color",
@@ -102,6 +104,22 @@ final class Session: @unchecked Sendable {
             }
             try? await group.shutdownGracefully()
         }
+    }
+
+    /// What the host runs, from one short command beside the shell. It ends with the connection at the latest.
+    private static func system(of client: SSHClient) async -> String? {
+        var output = ""
+        do {
+            for try await chunk in try await client.executeCommandStream("uname -s; cat /etc/os-release") {
+                switch chunk {
+                case .stdout(let buffer), .stderr(let buffer): output += String(buffer: buffer)
+                }
+                if output.utf8.count > 16_384 { break }
+            }
+        } catch {
+            // A non-zero exit (a Mac has no os-release, Windows no uname) still leaves its output.
+        }
+        return Server.system(from: output)
     }
 
     static func auth(for server: Server) throws -> SSHAuthenticationMethod {

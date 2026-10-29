@@ -61,3 +61,17 @@ final class BackupTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.data(forKey: "servers.unreadable"), unreadable)
     }
 }
+
+/// What `uname -s; cat /etc/os-release` prints on each kind of host, and the logo it picks.
+final class SystemTests: XCTestCase {
+    func testLogoFromOutput() {
+        XCTAssertEqual(Server.system(from: "Linux\nPRETTY_NAME=\"Ubuntu 24.04.1 LTS\"\nNAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n"), "ubuntu")
+        XCTAssertEqual(Server.system(from: "Linux\r\nID=\"raspbian\"\r\n"), "raspberrypi")
+        XCTAssertEqual(Server.system(from: "Linux\nID=\"opensuse-tumbleweed\"\n"), "opensuse")
+        XCTAssertEqual(Server.system(from: "Linux\nID=gentoo\n"), "linux", "an unknown distro still gets Tux")
+        XCTAssertEqual(Server.system(from: "Darwin\ncat: /etc/os-release: No such file or directory\n"), "macos")
+        XCTAssertEqual(Server.system(from: "'uname' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n"), "windows")
+        XCTAssertNil(Server.system(from: ""))
+        XCTAssertNil(Server.system(from: "This service allows sftp connections only.\n"))
+    }
+}

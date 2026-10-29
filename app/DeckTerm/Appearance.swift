@@ -12,8 +12,8 @@ enum Theme: String, CaseIterable, Identifiable {
     var name: String {
         switch self {
         case .classic: "DeckTerm"
-        case .green: String(localized: "Phosphor")
-        case .amber: String(localized: "Amber")
+        case .green: "Phosphor"
+        case .amber: "Amber"
         case .oneDark: "One Dark"
         case .darcula: "Darcula"
         case .catppuccin: "Catppuccin"
@@ -146,6 +146,50 @@ struct Mark: View {
             .frame(width: size, height: size)
             .background(theme.raised, in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
             .accessibilityHidden(true)
+    }
+}
+
+/// The host's logo once a connection has learned what it runs, else the prompt. Colored by the caller.
+struct SystemMark: View {
+    let system: String?
+    let font: TermFont
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            switch system {
+            case "macos": Image(systemName: "applelogo").font(.system(size: size))
+            case let name?: Image(name).resizable().scaledToFit().frame(width: size, height: size)
+            case nil: Text(verbatim: ">").font(font.font(size * 1.1, bold: true))
+            }
+        }
+        .frame(width: size + 2)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Which side of the landscape screen the camera is on. iOS insets both sides by its depth;
+/// the other side gives that room back and only keeps clear of the rounded corners.
+final class Housing: ObservableObject {
+    static let shared = Housing()
+    @Published private(set) var onLeft = true
+    private var watcher: NSKeyValueObservation?
+
+    func watch(_ scene: UIWindowScene) {
+        guard watcher == nil else { return }
+        watcher = scene.observe(\.effectiveGeometry, options: [.initial, .new]) { [weak self] scene, _ in
+            // Interface landscapeRight has the home side on the right, so the top of the phone on the left.
+            let onLeft = scene.effectiveGeometry.interfaceOrientation != .landscapeLeft
+            DispatchQueue.main.async { if self?.onLeft != onLeft { self?.onLeft = onLeft } }
+        }
+    }
+}
+
+extension View {
+    /// The system inset on the camera's side, only `corner` on the other.
+    func clearsHousing(_ onLeft: Bool, corner: CGFloat = 20) -> some View {
+        padding(onLeft ? .trailing : .leading, corner)
+            .ignoresSafeArea(.container, edges: onLeft ? .trailing : .leading)
     }
 }
 

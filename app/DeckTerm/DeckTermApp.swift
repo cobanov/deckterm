@@ -15,19 +15,19 @@ struct DeckTermApp: App {
         WindowGroup {
             ServerList()
                 .preferredColorScheme(.dark)
-                .fontDesign(.monospaced)  // system text (forms, menus) in SF Mono, next to the chosen face
         }
     }
 }
 
 /// The devices as cards, a grid for the landscape screen. ⌘1–9 opens one, ⌘N adds one.
+/// With no devices yet, the welcome screen stands in for it.
 struct ServerList: View {
     @StateObject private var store = Store()
-    @AppStorage("welcomed") private var welcomed = false
+    @StateObject private var sessions = Sessions()
+    @ObservedObject private var housing = Housing.shared
     @AppStorage("theme") private var theme = Theme.classic
     @AppStorage("font") private var font = TermFont.jetBrains
     @State private var editing: Server?
-    @State private var connected: Server?
     @State private var keyShown = false
     @State private var importing = false
     @State private var aboutShown = false
@@ -35,20 +35,28 @@ struct ServerList: View {
 
     var body: some View {
         Group {
-            if welcomed {
-                list
+            if store.servers.isEmpty {
+                WelcomeScreen(addDevice: { editing = Server() }, addKey: { keyShown = true }, restore: { importing = true })
             } else {
-                WelcomeScreen(addDevice: { welcomed = true; editing = Server() },
-                              addKey: { keyShown = true },
-                              restore: { importing = true },
-                              skip: { welcomed = true })
+                list
             }
         }
         .tint(theme.accent)
         .sheet(item: $editing) { ServerForm(server: $0, store: store) }
         .sheet(isPresented: $keyShown) { KeyForm() }
         .sheet(isPresented: $aboutShown) { AboutSheet() }
-        .fullScreenCover(item: $connected) { TerminalScreen(server: $0) }
+        .fullScreenCover(isPresented: Binding(get: { sessions.active != nil }, set: { if !$0 { sessions.active = nil } })) {
+            TerminalScreen(sessions: sessions, device: open)
+        }
+        .onChange(of: store.servers) { _, servers in sessions.sync(servers) }
+        .onAppear {
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene { housing.watch(scene) }
+            sessions.detected = { [store] id, system in
+                guard var server = store.servers.first(where: { $0.id == id }), server.system != system else { return }
+                server.system = system
+                store.save(server)
+            }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json], onCompletion: restore)
         .alert("Backup", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
         } message: {
@@ -62,11 +70,15 @@ struct ServerList: View {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             let count = try JSONDecoder().decode(Backup.self, from: Data(contentsOf: url)).restore(into: store)
-            welcomed = true
             notice = String(localized: "Restored \(count) devices and your settings. Passwords and the SSH key are not in backups: paste the key once.")
         } catch {
             notice = String(localized: "Couldn't read the backup: \(error.localizedDescription)")
         }
+    }
+
+    /// The device at this place in the list, connected or brought back.
+    private func open(_ index: Int) {
+        if store.servers.indices.contains(index) { sessions.show(store.servers[index]) }
     }
 
     private var list: some View {
@@ -93,40 +105,28 @@ struct ServerList: View {
             .padding(.horizontal)
             .padding(.vertical, 10)
 
-            if store.servers.isEmpty {
-                VStack(spacing: 10) {
-                    Text("No devices yet").font(font.font(15, bold: true))
-                    Text("Add an SSH server, then tap it to open its terminal.")
-                        .font(font.font(12))
-                        .foregroundStyle(theme.fg.opacity(0.55))
-                    Button { editing = Server() } label: { Label("Add a device", systemImage: "plus") }
-                        .buttonStyle(PillStyle(theme: theme, font: font, primary: true))
-                        .frame(width: 220)
-                        .padding(.top, 6)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12)], spacing: 12) {
-                        ForEach(Array(store.servers.enumerated()), id: \.element.id) { index, server in
-                            card(server, index: index)
-                        }
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12)], spacing: 12) {
+                    ForEach(Array(store.servers.enumerated()), id: \.element.id) { index, server in
+                        card(server, index: index)
                     }
-                    .padding([.horizontal, .bottom])
                 }
+                .padding([.horizontal, .bottom])
             }
         }
+        .clearsHousing(housing.onLeft, corner: 8)
         .foregroundStyle(theme.fg)
         .background(theme.bg.ignoresSafeArea())
     }
 
     private func card(_ server: Server, index: Int) -> some View {
-        Button { connected = server } label: {
+        Button { sessions.show(server) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    Text(verbatim: ">").font(font.font(15, bold: true)).foregroundStyle(theme.accent).accessibilityHidden(true)
+                    SystemMark(system: server.system, font: font, size: 15).foregroundStyle(theme.accent)
                     Text(verbatim: server.title).font(font.font(15, bold: true)).lineLimit(1)
                     Spacer(minLength: 4)
+                    if let session = sessions.model(for: server) { LiveDot(model: session, theme: theme) }
                     if index < 9 {
                         Text(verbatim: "⌘\(index + 1)")
                             .font(font.font(11))
@@ -157,7 +157,7 @@ struct ServerList: View {
 
     /// Off while a terminal is open: its key commands would reach this screen through the responder chain.
     private func shortcut(_ key: KeyEquivalent) -> KeyboardShortcut? {
-        connected == nil ? KeyboardShortcut(key) : nil
+        sessions.active == nil ? KeyboardShortcut(key) : nil
     }
 
     private func headerButton(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
@@ -172,6 +172,16 @@ struct ServerList: View {
             .frame(width: 38, height: 34)
             .foregroundStyle(theme.fg)
             .background(theme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// On a card whose device has a session open: the connection's color.
+private struct LiveDot: View {
+    @ObservedObject var model: TerminalModel
+    let theme: Theme
+
+    var body: some View {
+        Circle().fill(model.state.color(theme)).frame(width: 7, height: 7).accessibilityLabel("Connected")
     }
 }
 
