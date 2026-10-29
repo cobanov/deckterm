@@ -21,10 +21,10 @@ struct TerminalScreen: View {
         ZStack(alignment: .trailing) {
             VStack(spacing: 0) {
                 TerminalHost(model: model, fontSize: fontSize, font: font, theme: theme, commands: [
-                    .init(input: "=", title: "Büyüt") { fontSize = min(fontSize + 1, 32) },
-                    .init(input: "-", title: "Küçült") { fontSize = max(fontSize - 1, 8) },
-                    .init(input: ",", title: "Panel") { showPanel(!panelShown) },
-                    .init(input: "w", title: "Listeye dön") { dismiss() },
+                    .init(input: "=", title: String(localized: "Bigger text")) { fontSize = min(fontSize + 1, 32) },
+                    .init(input: "-", title: String(localized: "Smaller text")) { fontSize = max(fontSize - 1, 8) },
+                    .init(input: ",", title: String(localized: "Panel")) { showPanel(!panelShown) },
+                    .init(input: "w", title: String(localized: "Back to list")) { dismiss() },
                 ])
                 KeyBar(model: model, theme: theme, font: font, panel: { showPanel(true) })
             }
@@ -105,7 +105,7 @@ final class TerminalModel: ObservableObject, TerminalViewDelegate {
 
     func connect() {
         session?.close()
-        view?.feed(text: "\(server.user)@\(server.address) bağlanıyor…\r\n")
+        view?.feed(text: String(localized: "Connecting to \(server.user)@\(server.address)…") + "\r\n")
         state = .connecting
         let session = Session()
         self.session = session
@@ -136,7 +136,7 @@ final class TerminalModel: ObservableObject, TerminalViewDelegate {
     private func ended(_ message: String?) {
         guard let message else { return close() }
         state = .ended(message)
-        view?.feed(text: "\r\n\u{1b}[33m\(message)\u{1b}[0m\r\nEnter: yeniden bağlan · Esc: geri\r\n")
+        view?.feed(text: "\r\n\u{1b}[33m\(message)\u{1b}[0m\r\n" + String(localized: "Enter: reconnect · Esc: back") + "\r\n")
     }
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
@@ -338,12 +338,12 @@ private struct KeyBar: View {
     var body: some View {
         HStack(spacing: 3) {
             Circle().fill(model.state.color(theme)).frame(width: 7, height: 7)
-            Text(model.server.title)
+            Text(verbatim: model.server.title)
                 .lineLimit(1)
                 .foregroundStyle(theme.fg.opacity(0.6))
                 .padding(.trailing, 6)
             if case .ended = model.state {
-                key("bağlan", "Yeniden bağlan") { model.connect() }
+                key(String(localized: "connect"), "Reconnect") { model.connect() }
             }
             Spacer(minLength: 4)
             key("esc", "Escape") { model.view?.send([0x1b]) }
@@ -351,14 +351,14 @@ private struct KeyBar: View {
             key("^C", "Control C") { model.view?.send([0x03]) }
             key("^D", "Control D") { model.view?.send([0x04]) }
             key("^Z", "Control Z") { model.view?.send([0x1a]) }
-            key("|", "Dikey çizgi") { model.view?.send(txt: "|") }
+            key("|", "Pipe") { model.view?.send(txt: "|") }
             key("~", "Tilde") { model.view?.send(txt: "~") }
-            key("←", "Sol") { model.view?.sendKeyLeft() }
-            key("↓", "Aşağı") { model.view?.sendKeyDown() }
-            key("↑", "Yukarı") { model.view?.sendKeyUp() }
-            key("→", "Sağ") { model.view?.sendKeyRight() }
+            key("←", "Left") { model.view?.sendKeyLeft() }
+            key("↓", "Down") { model.view?.sendKeyDown() }
+            key("↑", "Up") { model.view?.sendKeyUp() }
+            key("→", "Right") { model.view?.sendKeyRight() }
             icon(model.keyboardShown ? "keyboard.chevron.compact.down" : "keyboard",
-                 model.keyboardShown ? "Klavyeyi gizle" : "Klavyeyi göster", model.toggleKeyboard)
+                 model.keyboardShown ? "Hide keyboard" : "Show keyboard", model.toggleKeyboard)
             icon("sidebar.right", "Panel", panel)
         }
         .font(font.font(12))
@@ -369,9 +369,9 @@ private struct KeyBar: View {
         .overlay(alignment: .top) { Rectangle().fill(theme.fg.opacity(0.08)).frame(height: 1) }
     }
 
-    private func key(_ title: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+    private func key(_ title: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(verbatim: title)
                 .padding(.horizontal, 7)
                 .frame(minWidth: 30, minHeight: 24)
                 .background(theme.raised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -380,7 +380,7 @@ private struct KeyBar: View {
         .accessibilityLabel(label)
     }
 
-    private func icon(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+    private func icon(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: symbol).frame(width: 32, height: 24) }
             .buttonStyle(.plain)
             .accessibilityLabel(label)
@@ -407,19 +407,19 @@ private struct SidePanel: View {
             HStack(spacing: 8) {
                 Circle().fill(model.state.color(theme)).frame(width: 8, height: 8)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(model.server.title).font(font.font(14, bold: true))
-                    Text("\(model.server.user)@\(model.server.address):\(String(model.server.port))")
+                    Text(verbatim: model.server.title).font(font.font(14, bold: true))
+                    Text(verbatim: "\(model.server.user)@\(model.server.address):\(model.server.port)")
                         .font(font.font(11))
                         .foregroundStyle(theme.fg.opacity(0.55))
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)
-                icon("arrow.clockwise", "Yeniden bağlan") { model.connect() }
-                icon("square.grid.2x2", "Listeye dön", back)
+                icon("arrow.clockwise", "Reconnect") { model.connect() }
+                icon("square.grid.2x2", "Back to list", back)
             }
-            Picker("Bölüm", selection: $tab) {
-                Text("Snippet").tag(Tab.snippets)
-                Text("Görünüm").tag(Tab.look)
+            Picker("Section", selection: $tab) {
+                Text("Snippets").tag(Tab.snippets)
+                Text("Look").tag(Tab.look)
             }
             .pickerStyle(.segmented)
             ScrollView {
@@ -444,7 +444,7 @@ private struct SidePanel: View {
 
     private var snippetList: some View {
         VStack(alignment: .leading, spacing: 4) {
-            TextField("Yeni snippet: komutu yaz, Enter", text: $draft)
+            TextField("New snippet: type a command, then Enter", text: $draft)
                 .font(font.font(13))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -456,7 +456,7 @@ private struct SidePanel: View {
             ForEach(Array(lines.enumerated()), id: \.offset) { index, command in
                 Button { send(command, run: true) } label: {
                     HStack {
-                        Text(command).font(font.font(13)).lineLimit(1)
+                        Text(verbatim: command).font(font.font(13)).lineLimit(1)
                         Spacer(minLength: 4)
                         Image(systemName: "return").font(.system(size: 11)).foregroundStyle(theme.accent)
                     }
@@ -466,13 +466,13 @@ private struct SidePanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("Çalıştırır")
+                .accessibilityHint("Runs it")
                 .contextMenu {
-                    Button("Çalıştırmadan yapıştır", systemImage: "text.insert") { send(command, run: false) }
-                    Button("Sil", systemImage: "trash", role: .destructive) { remove(index) }
+                    Button("Paste without running", systemImage: "text.insert") { send(command, run: false) }
+                    Button("Delete", systemImage: "trash", role: .destructive) { remove(index) }
                 }
             }
-            Text("Dokun: çalıştır · Basılı tut: yapıştır ya da sil")
+            Text("Tap: run · Hold: paste or delete")
                 .font(font.font(10))
                 .foregroundStyle(theme.fg.opacity(0.45))
                 .padding(.top, 4)
@@ -481,11 +481,11 @@ private struct SidePanel: View {
 
     private var look: some View {
         VStack(alignment: .leading, spacing: 10) {
-            caption("Yazı tipi")
+            caption("Font")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
                 ForEach(TermFont.allCases) { face in
                     Button { font = face } label: {
-                        Text(face.name)
+                        Text(verbatim: face.name)
                             .font(face.font(12))
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, minHeight: 32)
@@ -497,18 +497,18 @@ private struct SidePanel: View {
                 }
             }
             Stepper(value: $fontSize, in: 8...32) {
-                Text("Boyut \(Int(fontSize)) pt").font(font.font(12))
+                Text("Size \(Int(fontSize)) pt").font(font.font(12))
             }
-            caption("Tema")
+            caption("Theme")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
                 ForEach(Theme.allCases) { scheme in
                     Button { theme = scheme } label: { swatch(scheme) }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(scheme.name)
+                        .accessibilityLabel(Text(verbatim: scheme.name))
                         .accessibilityAddTraits(scheme == theme ? .isSelected : [])
                 }
             }
-            Text("Basılı tut ve kaydır: yön tuşları\nSoldan çek: listeye dön · Sağdan çek: bu panel\n⌘W geri · ⌘= ⌘- boyut · ⌘, panel")
+            Text("Hold and slide: arrow keys\nSwipe from the left: the list · from the right: this panel\n⌘W back · ⌘= ⌘- text size · ⌘, panel")
                 .font(font.font(10))
                 .foregroundStyle(theme.fg.opacity(0.45))
                 .padding(.top, 4)
@@ -517,7 +517,7 @@ private struct SidePanel: View {
 
     private func swatch(_ scheme: Theme) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(scheme.name).font(font.font(11, bold: true)).foregroundStyle(scheme.fg).lineLimit(1)
+            Text(verbatim: scheme.name).font(font.font(11, bold: true)).foregroundStyle(scheme.fg).lineLimit(1)
             HStack(spacing: 3) {
                 ForEach(1..<7) { Circle().fill(scheme.ansiColor($0)).frame(width: 8, height: 8) }
             }
@@ -534,11 +534,11 @@ private struct SidePanel: View {
             .strokeBorder(selected ? theme.accent : .clear, lineWidth: 2)
     }
 
-    private func caption(_ text: String) -> some View {
-        Text(text.uppercased()).font(font.font(10, bold: true)).foregroundStyle(theme.fg.opacity(0.45))
+    private func caption(_ text: LocalizedStringKey) -> some View {
+        Text(text).textCase(.uppercase).font(font.font(10, bold: true)).foregroundStyle(theme.fg.opacity(0.45))
     }
 
-    private func icon(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+    private func icon(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))

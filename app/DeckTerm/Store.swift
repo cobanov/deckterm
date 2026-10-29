@@ -90,7 +90,7 @@ struct Backup: Codable, Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .json).suggestedFileName("deckterm-yedek.json")
+        CodableRepresentation(contentType: .json).suggestedFileName("deckterm-backup.json")
     }
 }
 

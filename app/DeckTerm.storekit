@@ -1,0 +1,62 @@
+{
+  "identifier": "8A1F4C2E",
+  "nonRenewingSubscriptions": [],
+  "subscriptionGroups": [],
+  "products": [
+    {
+      "displayPrice": "0.99",
+      "familyShareable": false,
+      "internalID": "6828364955",
+      "localizations": [
+        {
+          "description": "A small thank-you for DeckTerm.",
+          "displayName": "Small Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "dev.cobanov.deckterm.tip.small",
+      "referenceName": "Small Tip",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "2.99",
+      "familyShareable": false,
+      "internalID": "6828365095",
+      "localizations": [
+        {
+          "description": "A bigger thank-you for DeckTerm.",
+          "displayName": "Medium Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "dev.cobanov.deckterm.tip.medium",
+      "referenceName": "Medium Tip",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "9.99",
+      "familyShareable": false,
+      "internalID": "6828365068",
+      "localizations": [
+        {
+          "description": "A big thank-you for DeckTerm.",
+          "displayName": "Large Tip",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "dev.cobanov.deckterm.tip.large",
+      "referenceName": "Large Tip",
+      "type": "Consumable"
+    }
+  ],
+  "settings": {
+    "_applicationInternalID": "6828224143",
+    "_developerTeamID": "6U58AKY6F8",
+    "_locale": "en_US",
+    "_storefront": "USA"
+  },
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}

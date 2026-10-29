@@ -49,7 +49,6 @@ final class SessionTests: XCTestCase {
         }
         XCTAssertTrue(shell.text.contains("deckterm 42"), shell.text)
         XCTAssertTrue(Pins.get(server.pinKey)?.hasPrefix("SHA256:") == true)
-        print("pinned", Pins.get(server.pinKey) ?? "-")
 
         let exit = run(until: { _ in false }) { $0.send(ArraySlice("exit\r".utf8)) }
         XCTAssertEqual(exit.ended, .some(nil), "exit on a live connection ends without a message")
@@ -58,7 +57,7 @@ final class SessionTests: XCTestCase {
     func testChangedHostKeyIsRefused() {
         Pins.set(server.pinKey, "SHA256:not-this-host")
         let refused = run(until: { _ in false })
-        XCTAssertTrue(refused.ended??.contains("Host anahtarı değişti") == true, String(describing: refused.ended))
+        XCTAssertTrue(refused.ended??.contains("SHA256:") == true, "shows the key the server presented: \(String(describing: refused.ended))")
         XCTAssertEqual(Pins.get(server.pinKey), "SHA256:not-this-host", "a mismatch must not overwrite the pin")
     }
 }

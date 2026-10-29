@@ -1,0 +1,22 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "NSLocalNetworkUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeckTerm connects to SSH servers on your local network."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeckTerm, yerel ağdaki sunuculara SSH ile bağlanır."
+          }
+        }
+      }
+    }
+  }
+}

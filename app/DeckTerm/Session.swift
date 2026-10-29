@@ -96,7 +96,7 @@ final class Session: @unchecked Sendable {
                 }
                 let live = client.isConnected
                 try? await client.close()
-                if !Task.isCancelled { ended(live ? nil : "Bağlantı koptu.") }
+                if !Task.isCancelled { ended(live ? nil : String(localized: "Connection lost.")) }
             } catch {
                 if !Task.isCancelled { ended(Self.describe(error, presented: validator.presented)) }
             }
@@ -109,7 +109,7 @@ final class Session: @unchecked Sendable {
             return .passwordBased(username: server.user, password: password)
         }
         guard let pem = Keychain.get("privateKey") else {
-            throw Failure(errorDescription: "Özel anahtar yok: listedeki anahtar düğmesiyle ekle ya da bu cihaza parola gir.")
+            throw Failure(errorDescription: String(localized: "No private key: add one with the key button in the list, or give this device a password."))
         }
         return try keyAuth(user: server.user, pem: pem, passphrase: Keychain.get("passphrase"))
     }
@@ -125,11 +125,11 @@ final class Session: @unchecked Sendable {
 
     private static func describe(_ error: Error, presented: String?) -> String {
         if let presented {
-            return "Host anahtarı değişti! Sunucunun sunduğu: \(presented). Değişikliği biliyorsan cihazı düzenle → Host anahtarını unut."
+            return String(localized: "Host key changed! The server presented \(presented). If you expected this, edit the device → Forget host key.")
         }
         let text = String(describing: error)
         if text.contains("authenticationFailed") || text.contains("allAuthenticationOptionsFailed") {
-            return "Sunucu girişi reddetti: kullanıcıyı, anahtarı ya da parolayı kontrol et."
+            return String(localized: "The server refused the login: check the user, the key or the password.")
         }
         return error.localizedDescription
     }

@@ -12,8 +12,8 @@ enum Theme: String, CaseIterable, Identifiable {
     var name: String {
         switch self {
         case .classic: "DeckTerm"
-        case .green: "Fosfor"
-        case .amber: "Kehribar"
+        case .green: String(localized: "Phosphor")
+        case .amber: String(localized: "Amber")
         case .oneDark: "One Dark"
         case .darcula: "Darcula"
         case .catppuccin: "Catppuccin"
@@ -140,7 +140,7 @@ struct Mark: View {
     let size: CGFloat
 
     var body: some View {
-        Text(">_")
+        Text(verbatim: ">_")
             .font(font.font(size * 0.4, bold: true))
             .foregroundStyle(theme.accent)
             .frame(width: size, height: size)

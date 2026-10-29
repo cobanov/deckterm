@@ -1,8 +1,15 @@
 import SwiftUI
+import StoreKit
 
 @main
 struct DeckTermApp: App {
-    init() { TermFont.register() }
+    init() {
+        TermFont.register()
+        // Tips that complete outside the tip jar (Ask to Buy, an interrupted purchase) arrive here; finished, they stop coming back.
+        Task.detached {
+            for await case .verified(let transaction) in Transaction.updates { await transaction.finish() }
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -23,6 +30,7 @@ struct ServerList: View {
     @State private var connected: Server?
     @State private var keyShown = false
     @State private var importing = false
+    @State private var aboutShown = false
     @State private var notice: String?
 
     var body: some View {
@@ -39,9 +47,10 @@ struct ServerList: View {
         .tint(theme.accent)
         .sheet(item: $editing) { ServerForm(server: $0, store: store) }
         .sheet(isPresented: $keyShown) { KeyForm() }
+        .sheet(isPresented: $aboutShown) { AboutSheet() }
         .fullScreenCover(item: $connected) { TerminalScreen(server: $0) }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json], onCompletion: restore)
-        .alert("Yedek", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+        .alert("Backup", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
         } message: {
             Text(notice ?? "")
         }
@@ -54,9 +63,9 @@ struct ServerList: View {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             let count = try JSONDecoder().decode(Backup.self, from: Data(contentsOf: url)).restore(into: store)
             welcomed = true
-            notice = "\(count) cihaz ve ayarlar geri yüklendi. Parolalar ve SSH anahtarı yedekte yok: anahtarı bir kez yapıştır."
+            notice = String(localized: "Restored \(count) devices and your settings. Passwords and the SSH key are not in backups: paste the key once.")
         } catch {
-            notice = "Yedek okunamadı: \(error.localizedDescription)"
+            notice = String(localized: "Couldn't read the backup: \(error.localizedDescription)")
         }
     }
 
@@ -64,19 +73,21 @@ struct ServerList: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Mark(theme: theme, font: font, size: 28)
-                Text("deckterm").font(font.font(18, bold: true))
+                Text(verbatim: "deckterm").font(font.font(18, bold: true))
                 Spacer()
                 Menu {
-                    ShareLink(item: Backup(store), preview: SharePreview("DeckTerm yedeği")) {
-                        Label("Yedeği dışa aktar", systemImage: "square.and.arrow.up")
+                    ShareLink(item: Backup(store), preview: SharePreview("DeckTerm backup")) {
+                        Label("Export backup", systemImage: "square.and.arrow.up")
                     }
-                    Button("Yedekten geri yükle", systemImage: "square.and.arrow.down") { importing = true }
+                    Button("Restore from backup", systemImage: "square.and.arrow.down") { importing = true }
+                    Divider()
+                    Button("About DeckTerm", systemImage: "info.circle") { aboutShown = true }
                 } label: {
                     headerIcon("ellipsis")
                 }
-                .accessibilityLabel("Yedek")
-                headerButton("key", "SSH anahtarı") { keyShown = true }
-                headerButton("plus", "Cihaz ekle") { editing = Server() }
+                .accessibilityLabel("More")
+                headerButton("key", "SSH key") { keyShown = true }
+                headerButton("plus", "Add a device") { editing = Server() }
                     .keyboardShortcut(shortcut("n"))
             }
             .padding(.horizontal)
@@ -84,11 +95,11 @@ struct ServerList: View {
 
             if store.servers.isEmpty {
                 VStack(spacing: 10) {
-                    Text("Henüz cihaz yok").font(font.font(15, bold: true))
-                    Text("Bir SSH sunucusu ekle; dokununca terminali açılır.")
+                    Text("No devices yet").font(font.font(15, bold: true))
+                    Text("Add an SSH server, then tap it to open its terminal.")
                         .font(font.font(12))
                         .foregroundStyle(theme.fg.opacity(0.55))
-                    Button { editing = Server() } label: { Label("Cihaz ekle", systemImage: "plus") }
+                    Button { editing = Server() } label: { Label("Add a device", systemImage: "plus") }
                         .buttonStyle(PillStyle(theme: theme, font: font, primary: true))
                         .frame(width: 220)
                         .padding(.top, 6)
@@ -113,17 +124,17 @@ struct ServerList: View {
         Button { connected = server } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    Text(">").font(font.font(15, bold: true)).foregroundStyle(theme.accent).accessibilityHidden(true)
-                    Text(server.title).font(font.font(15, bold: true)).lineLimit(1)
+                    Text(verbatim: ">").font(font.font(15, bold: true)).foregroundStyle(theme.accent).accessibilityHidden(true)
+                    Text(verbatim: server.title).font(font.font(15, bold: true)).lineLimit(1)
                     Spacer(minLength: 4)
                     if index < 9 {
-                        Text("⌘\(index + 1)")
+                        Text(verbatim: "⌘\(index + 1)")
                             .font(font.font(11))
                             .foregroundStyle(theme.fg.opacity(0.35))
                             .accessibilityHidden(true)
                     }
                 }
-                Text("\(server.user)@\(server.address):\(String(server.port))")
+                Text(verbatim: "\(server.user)@\(server.address):\(server.port)")
                     .font(font.font(12))
                     .foregroundStyle(theme.fg.opacity(0.55))
                     .lineLimit(1)
@@ -137,10 +148,10 @@ struct ServerList: View {
         .buttonStyle(.plain)
         .keyboardShortcut(index < 9 ? shortcut(KeyEquivalent(Character(String(index + 1)))) : nil)
         .accessibilityLabel(server.title)
-        .accessibilityValue("\(server.user)@\(server.address)")
+        .accessibilityValue(Text(verbatim: "\(server.user)@\(server.address)"))
         .contextMenu {
-            Button("Düzenle", systemImage: "pencil") { editing = server }
-            Button("Sil", systemImage: "trash", role: .destructive) { store.delete(server) }
+            Button("Edit", systemImage: "pencil") { editing = server }
+            Button("Delete", systemImage: "trash", role: .destructive) { store.delete(server) }
         }
     }
 
@@ -149,7 +160,7 @@ struct ServerList: View {
         connected == nil ? KeyboardShortcut(key) : nil
     }
 
-    private func headerButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+    private func headerButton(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
         Button(action: action) { headerIcon(symbol) }
             .buttonStyle(.plain)
             .accessibilityLabel(label)
@@ -168,7 +179,7 @@ struct ServerForm: View {
     @State var server: Server
     let store: Store
     @State private var password = ""
-    /// The pin of the device as it was opened; the address and port may change in the form before Kaydet.
+    /// The pin of the device as it was opened; the address and port may change in the form before Save.
     @State private var pinned: String?
     @State private var forget = false
     @State private var failed = false
@@ -177,24 +188,24 @@ struct ServerForm: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Ad (isteğe bağlı)", text: $server.name)
-                TextField("Adres", text: $server.address).keyboardType(.URL)
+                TextField("Name (optional)", text: $server.name)
+                TextField("Address", text: $server.address).keyboardType(.URL)
                 TextField("Port", value: $server.port, format: .number.grouping(.never)).keyboardType(.numberPad)
-                TextField("Kullanıcı", text: $server.user)
-                SecureField("Parola (boşsa anahtar kullanılır)", text: $password)
+                TextField("User", text: $server.user)
+                SecureField("Password (empty uses the key)", text: $password)
                 if pinned != nil && !forget {
-                    Button("Host anahtarını unut", role: .destructive) { forget = true }  // on Kaydet, so Vazgeç undoes it
+                    Button("Forget host key", role: .destructive) { forget = true }  // on Save, so Cancel undoes it
                 }
             }
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .navigationTitle(server.title.isEmpty ? "Yeni cihaz" : server.title)
+            .navigationTitle(server.title.isEmpty ? String(localized: "New device") : server.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Kaydet", action: save).disabled(server.cleaned == nil) }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Save", action: save).disabled(server.cleaned == nil) }
             }
-            .alert("Parola Keychain'e yazılamadı", isPresented: $failed) {}
+            .alert("Couldn't save the password to the Keychain", isPresented: $failed) {}
             .onAppear {
                 password = Keychain.get(server.passwordAccount) ?? ""
                 pinned = Pins.get(server.pinKey) != nil ? server.pinKey : nil
@@ -211,7 +222,7 @@ struct ServerForm: View {
     }
 }
 
-/// One private key for every server: the Mac's own, pasted once.
+/// One private key for every server, pasted once.
 struct KeyForm: View {
     @State private var pem = ""
     @State private var passphrase = ""
@@ -226,11 +237,11 @@ struct KeyForm: View {
                     TextEditor(text: $pem)
                         .font(.caption.monospaced())
                         .frame(minHeight: 120)
-                    SecureField("Anahtar parolası (şifreliyse)", text: $passphrase)
+                    SecureField("Key passphrase (if it has one)", text: $passphrase)
                 } header: {
-                    Text(saved ? "Kayıtlı anahtarın yerine geçer" : "Özel anahtar")
+                    saved ? Text("Replaces the saved key") : Text("Private key")
                 } footer: {
-                    Text("Mac'te `pbcopy < ~/.ssh/id_ed25519` çalıştır, buraya yapıştır. Anahtar bu iPhone'un Keychain'inde kalır.")
+                    Text("Paste an OpenSSH private key (ed25519 or RSA). On a Mac, `pbcopy < ~/.ssh/id_ed25519` copies yours. The key stays in this iPhone's Keychain; its public half goes in each server's `~/.ssh/authorized_keys`.")
                 }
                 if let error {
                     Text(error).foregroundStyle(.red)
@@ -238,12 +249,12 @@ struct KeyForm: View {
             }
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .navigationTitle("SSH anahtarı")
+            .navigationTitle("SSH key")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet", action: save).disabled(pem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Save", action: save).disabled(pem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -254,10 +265,10 @@ struct KeyForm: View {
         do {
             _ = try Session.keyAuth(user: "", pem: key, passphrase: passphrase.isEmpty ? nil : passphrase)
         } catch {
-            return self.error = "Anahtar okunamadı. OpenSSH biçiminde (ed25519 ya da RSA), BEGIN/END satırlarıyla yapıştır; şifreliyse parolasını gir."
+            return self.error = String(localized: "Couldn't read the key. Paste it in OpenSSH format (ed25519 or RSA) with its BEGIN and END lines, and its passphrase if it has one.")
         }
         guard Keychain.set("privateKey", key), Keychain.set("passphrase", passphrase) else {
-            return self.error = "Keychain'e yazılamadı."
+            return self.error = String(localized: "Couldn't save to the Keychain.")
         }
         dismiss()
     }

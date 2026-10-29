@@ -14,23 +14,23 @@ struct WelcomeScreen: View {
         HStack(spacing: 0) {
             VStack(spacing: 14) {
                 Mark(theme: theme, font: font, size: 72)
-                Text("deckterm")
+                Text(verbatim: "deckterm")
                     .font(font.font(34, bold: true))
                     .foregroundStyle(theme.fg)
-                Text("Bluetooth klavyen için SSH terminali")
+                Text("The SSH terminal for your cyberdeck")
                     .font(font.font(13))
                     .foregroundStyle(theme.fg.opacity(0.55))
             }
             .frame(maxWidth: .infinity)
 
             VStack(spacing: 10) {
-                Button(action: addDevice) { Label("Cihaz ekle", systemImage: "plus") }
+                Button(action: addDevice) { Label("Add a device", systemImage: "plus") }
                     .buttonStyle(PillStyle(theme: theme, font: font, primary: true))
-                Button(action: addKey) { Label("SSH anahtarı ekle", systemImage: "key") }
+                Button(action: addKey) { Label("Add an SSH key", systemImage: "key") }
                     .buttonStyle(PillStyle(theme: theme, font: font))
-                Button(action: restore) { Label("Yedekten geri yükle", systemImage: "square.and.arrow.down") }
+                Button(action: restore) { Label("Restore from backup", systemImage: "square.and.arrow.down") }
                     .buttonStyle(PillStyle(theme: theme, font: font))
-                Button("Şimdilik geç", action: skip)
+                Button("Not now", action: skip)
                     .font(font.font(13))
                     .foregroundStyle(theme.fg.opacity(0.55))
                     .padding(.top, 8)
@@ -47,14 +47,14 @@ struct WelcomeScreen: View {
                     .frame(width: 36, height: 36)
                     .background(theme.raised, in: Circle())
             }
-            .accessibilityLabel("Kapat")
+            .accessibilityLabel("Close")
             .padding(.top, 12)
         }
         .overlay(alignment: .bottom) {
             HStack {
-                Text("Sürüm \(version)")
+                Text("Version \(AboutSheet.version)")
                 Spacer()
-                Text("Anahtarlar ve parolalar yalnız bu iPhone'da kalır")
+                Text("Keys and passwords never leave this iPhone")
             }
             .font(font.font(11))
             .foregroundStyle(theme.fg.opacity(0.4))
@@ -62,10 +62,5 @@ struct WelcomeScreen: View {
         }
         .padding(.horizontal)
         .background(theme.bg.ignoresSafeArea())
-    }
-
-    private var version: String {
-        let info = Bundle.main.infoDictionary
-        return "\(info?["CFBundleShortVersionString"] ?? "?") (\(info?["CFBundleVersion"] ?? "?"))"
     }
 }
