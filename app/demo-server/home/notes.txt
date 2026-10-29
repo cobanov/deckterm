@@ -1,0 +1,5 @@
+Notes from the deck.
+
+- Swipe in from the right edge: snippets and themes.
+- Swipe in from the left edge: back to your devices.
+- Hold and slide on the terminal: arrow keys.

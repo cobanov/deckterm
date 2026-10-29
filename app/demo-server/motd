@@ -1,0 +1,10 @@
+
+  Welcome to the DeckTerm demo server.
+  A throwaway Ubuntu box, here so you can try the app.
+
+  Things to try:
+    htop             live processes (q quits)
+    tmux             split panes: Ctrl-b %   then Ctrl-b o to switch
+    vim notes.txt    an editor (Esc, then :q! quits)
+    git log          a tiny repository in ~/project
+

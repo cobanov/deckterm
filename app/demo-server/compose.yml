@@ -1,0 +1,24 @@
+# DeckTerm's App Review demo server. Runs on nuc in /opt/deckterm-demo with a .env holding DEMO_PASSWORD.
+# deckterm-demo-fw.service drops every connection the container starts, so a login reaches nothing but this box.
+services:
+  demo:
+    build: .
+    container_name: deckterm-demo
+    hostname: deckterm-demo
+    restart: unless-stopped
+    env_file: .env
+    ports: ["2222:2222"]
+    volumes: ["keys:/keys"]
+    networks: [demo]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, SYS_CHROOT, AUDIT_WRITE, KILL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+volumes:
+  keys:
+networks:
+  demo:
+    driver_opts:
+      com.docker.network.bridge.name: br-deckdemo
