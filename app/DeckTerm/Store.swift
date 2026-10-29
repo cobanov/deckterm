@@ -1,5 +1,7 @@
 import Foundation
 import Security
+import CoreTransferable
+import UniformTypeIdentifiers
 
 struct Server: Codable, Identifiable, Hashable {
     var id = UUID()
@@ -36,6 +38,46 @@ final class Store: ObservableObject {
     func delete(_ server: Server) {
         servers.removeAll { $0.id == server.id }
         Keychain.set(server.passwordAccount, nil)
+    }
+}
+
+/// Devices, pinned host keys and settings as one JSON file, to share and restore on another phone.
+/// Passwords and the private key stay in the Keychain: the file may land in Files or iCloud.
+struct Backup: Codable, Transferable {
+    var servers: [Server]
+    var pins: [String: String]
+    var theme: String?
+    var font: String?
+    var fontSize: Double?
+    var snippets: String?
+
+    init(_ store: Store) {
+        let defaults = UserDefaults.standard
+        servers = store.servers
+        pins = defaults.dictionary(forKey: "pins") as? [String: String] ?? [:]
+        theme = defaults.string(forKey: "theme")
+        font = defaults.string(forKey: "font")
+        fontSize = defaults.object(forKey: "fontSize") as? Double
+        snippets = defaults.string(forKey: "snippets")
+    }
+
+    /// Adds devices or replaces them by id and takes the settings. A host key this phone already pinned wins.
+    /// Returns how many devices were taken; ones the device form would refuse are skipped.
+    func restore(into store: Store) -> Int {
+        let valid = servers.filter { !$0.address.isEmpty && !$0.user.isEmpty && (1...65535).contains($0.port) }
+        valid.forEach(store.save)
+        let defaults = UserDefaults.standard
+        let pinned = defaults.dictionary(forKey: "pins") as? [String: String] ?? [:]
+        defaults.set(pinned.merging(pins) { current, _ in current }, forKey: "pins")
+        for (key, value) in [("theme", theme), ("font", font), ("snippets", snippets)] where value != nil {
+            defaults.set(value, forKey: key)
+        }
+        if let fontSize { defaults.set(min(max(fontSize, 8), 32), forKey: "fontSize") }
+        return valid.count
+    }
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .json).suggestedFileName("deckterm-yedek.json")
     }
 }
 

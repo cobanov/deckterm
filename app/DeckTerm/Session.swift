@@ -109,7 +109,7 @@ final class Session: @unchecked Sendable {
             return .passwordBased(username: server.user, password: password)
         }
         guard let pem = Keychain.get("privateKey") else {
-            throw Failure(errorDescription: "Özel anahtar yok: listedeki anahtar düğmesiyle ekle ya da bu sunucuya parola gir.")
+            throw Failure(errorDescription: "Özel anahtar yok: listedeki anahtar düğmesiyle ekle ya da bu cihaza parola gir.")
         }
         return try keyAuth(user: server.user, pem: pem, passphrase: Keychain.get("passphrase"))
     }
@@ -125,7 +125,7 @@ final class Session: @unchecked Sendable {
 
     private static func describe(_ error: Error, presented: String?) -> String {
         if let presented {
-            return "Host anahtarı değişti! Sunucunun sunduğu: \(presented). Değişikliği biliyorsan sunucuyu düzenle → Host anahtarını unut."
+            return "Host anahtarı değişti! Sunucunun sunduğu: \(presented). Değişikliği biliyorsan cihazı düzenle → Host anahtarını unut."
         }
         let text = String(describing: error)
         if text.contains("authenticationFailed") || text.contains("allAuthenticationOptionsFailed") {
