@@ -103,6 +103,8 @@ struct ServerList: View {
                     .keyboardShortcut(shortcut("n"))
             }
             .padding(.horizontal)
+            // iPadOS draws its window controls over the top-leading corner and reports no inset for them.
+            .padding(.leading, UIDevice.current.model == "iPhone" ? 0 : 56)
             .padding(.vertical, 10)
 
             ScrollView {
