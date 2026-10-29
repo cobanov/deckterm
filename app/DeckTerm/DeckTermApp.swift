@@ -168,7 +168,9 @@ struct ServerForm: View {
     @State var server: Server
     let store: Store
     @State private var password = ""
-    @State private var pinned = false
+    /// The pin of the device as it was opened; the address and port may change in the form before Kaydet.
+    @State private var pinned: String?
+    @State private var forget = false
     @State private var failed = false
     @Environment(\.dismiss) private var dismiss
 
@@ -180,11 +182,8 @@ struct ServerForm: View {
                 TextField("Port", value: $server.port, format: .number.grouping(.never)).keyboardType(.numberPad)
                 TextField("Kullanıcı", text: $server.user)
                 SecureField("Parola (boşsa anahtar kullanılır)", text: $password)
-                if pinned {
-                    Button("Host anahtarını unut", role: .destructive) {
-                        Pins.set(server.pinKey, nil)
-                        pinned = false
-                    }
+                if pinned != nil && !forget {
+                    Button("Host anahtarını unut", role: .destructive) { forget = true }  // on Kaydet, so Vazgeç undoes it
                 }
             }
             .textInputAutocapitalization(.never)
@@ -193,27 +192,21 @@ struct ServerForm: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Kaydet", action: save).disabled(!valid) }
+                ToolbarItem(placement: .confirmationAction) { Button("Kaydet", action: save).disabled(server.cleaned == nil) }
             }
             .alert("Parola Keychain'e yazılamadı", isPresented: $failed) {}
             .onAppear {
                 password = Keychain.get(server.passwordAccount) ?? ""
-                pinned = Pins.get(server.pinKey) != nil
+                pinned = Pins.get(server.pinKey) != nil ? server.pinKey : nil
             }
         }
     }
 
-    private var valid: Bool {
-        !trimmed(server.address).isEmpty && !trimmed(server.user).isEmpty && (1...65535).contains(server.port)
-    }
-
-    private func trimmed(_ text: String) -> String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
-
     private func save() {
+        guard let device = server.cleaned else { return }
         guard Keychain.set(server.passwordAccount, password) else { return failed = true }
-        server.address = trimmed(server.address)
-        server.user = trimmed(server.user)
-        store.save(server)
+        if forget, let pinned { Pins.set(pinned, nil) }
+        store.save(device)
         dismiss()
     }
 }

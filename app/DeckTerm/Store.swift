@@ -14,6 +14,14 @@ struct Server: Codable, Identifiable, Hashable {
     /// Host keys are pinned per address, so pointing a server somewhere else starts a fresh pin.
     var pinKey: String { "\(address):\(port)" }
     var passwordAccount: String { "password.\(id.uuidString)" }
+
+    /// Address and user trimmed, or nil when the device couldn't connect. Both the form and backup restore save this.
+    var cleaned: Server? {
+        var server = self
+        server.address = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        server.user = user.trimmingCharacters(in: .whitespacesAndNewlines)
+        return server.address.isEmpty || server.user.isEmpty || !(1...65535).contains(port) ? nil : server
+    }
 }
 
 /// The server list, in UserDefaults. Secrets live in the Keychain, never here.
@@ -24,7 +32,13 @@ final class Store: ObservableObject {
 
     init() {
         let data = UserDefaults.standard.data(forKey: "servers") ?? Data()
-        servers = (try? JSONDecoder().decode([Server].self, from: data)) ?? []
+        do {
+            servers = data.isEmpty ? [] : try JSONDecoder().decode([Server].self, from: data)
+        } catch {
+            servers = []
+            // Kept aside, since the next save writes over "servers": a build that reads it can bring the devices back.
+            UserDefaults.standard.set(data, forKey: "servers.unreadable")
+        }
     }
 
     func save(_ server: Server) {
@@ -54,7 +68,7 @@ struct Backup: Codable, Transferable {
     init(_ store: Store) {
         let defaults = UserDefaults.standard
         servers = store.servers
-        pins = defaults.dictionary(forKey: "pins") as? [String: String] ?? [:]
+        pins = Pins.all
         theme = defaults.string(forKey: "theme")
         font = defaults.string(forKey: "font")
         fontSize = defaults.object(forKey: "fontSize") as? Double
@@ -64,11 +78,10 @@ struct Backup: Codable, Transferable {
     /// Adds devices or replaces them by id and takes the settings. A host key this phone already pinned wins.
     /// Returns how many devices were taken; ones the device form would refuse are skipped.
     func restore(into store: Store) -> Int {
-        let valid = servers.filter { !$0.address.isEmpty && !$0.user.isEmpty && (1...65535).contains($0.port) }
+        let valid = servers.compactMap(\.cleaned)
         valid.forEach(store.save)
+        Pins.all = Pins.all.merging(pins) { current, _ in current }
         let defaults = UserDefaults.standard
-        let pinned = defaults.dictionary(forKey: "pins") as? [String: String] ?? [:]
-        defaults.set(pinned.merging(pins) { current, _ in current }, forKey: "pins")
         for (key, value) in [("theme", theme), ("font", font), ("snippets", snippets)] where value != nil {
             defaults.set(value, forKey: key)
         }
@@ -83,17 +96,13 @@ struct Backup: Codable, Transferable {
 
 /// SHA-256 host key fingerprints, keyed by `Server.pinKey`.
 enum Pins {
-    private static var all: [String: String] {
-        UserDefaults.standard.dictionary(forKey: "pins") as? [String: String] ?? [:]
+    static var all: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: "pins") as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "pins") }
     }
 
     static func get(_ key: String) -> String? { all[key] }
-
-    static func set(_ key: String, _ fingerprint: String?) {
-        var pins = all
-        pins[key] = fingerprint
-        UserDefaults.standard.set(pins, forKey: "pins")
-    }
+    static func set(_ key: String, _ fingerprint: String?) { all[key] = fingerprint }
 }
 
 enum Keychain {
