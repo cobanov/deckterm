@@ -1,6 +1,6 @@
 import SwiftUI
-import SwiftTerm
 import CoreText
+import GhosttyTerminal
 
 /// Terminal color schemes. The chosen one also colors the app around the terminal.
 /// Raw values are stored in UserDefaults, so they never change.
@@ -58,7 +58,7 @@ enum Theme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// SwiftTerm's own default palette, which the black themes keep.
+    /// The palette the black themes keep: SwiftTerm's default, which DeckTerm shipped with.
     private static let terminalApp: [UInt32] = [
         0x000000, 0xC23621, 0x25BC24, 0xADAD27, 0x492EE1, 0xD338D3, 0x33BBC8, 0xCBCCCD,
         0x818383, 0xFC391F, 0x31E722, 0xEAEC23, 0x5833FF, 0xF935F8, 0x14F0F0, 0xE9EBEB,
@@ -66,11 +66,17 @@ enum Theme: String, CaseIterable, Identifiable {
 
     var background: UIColor { UIColor(hex[0]) }
     var foreground: UIColor { UIColor(hex[1]) }
-    var cursor: UIColor { UIColor(hex[2]) }
-    var selection: UIColor { UIColor(hex[3]) }
-    var ansi: [SwiftTerm.Color] {
-        hex[5...].map { SwiftTerm.Color(red: UInt16($0 >> 16 & 0xFF) * 257, green: UInt16($0 >> 8 & 0xFF) * 257,
-                                        blue: UInt16($0 & 0xFF) * 257) }
+    /// The terminal's colors as Ghostty config, the same in light and dark.
+    var ghostty: TerminalTheme {
+        let colors = TerminalConfiguration { config in
+            let css = hex.map { String(format: "#%06X", $0) }
+            config.withBackground(css[0])
+            config.withForeground(css[1])
+            config.withCursorColor(css[2])
+            config.withSelectionBackground(css[3])
+            for (index, color) in css[5...].enumerated() { config.withPalette(index, color: color) }
+        }
+        return TerminalTheme(light: colors, dark: colors)
     }
 
     var bg: SwiftUI.Color { SwiftUI.Color(background) }
@@ -106,6 +112,9 @@ enum TermFont: String, CaseIterable, Identifiable {
         case .menlo: "Menlo"
         }
     }
+
+    /// The family Ghostty finds the font by. iOS keeps SF Mono under a private name only.
+    var family: String { self == .sfMono ? ".AppleSystemUIFontMonospaced" : name }
 
     private var faces: (regular: String, bold: String)? {
         switch self {

@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTerm
+import GhosttyTerminal
 
 /// Full-screen terminal with a thin key bar under it. Swipe in from the left edge to go back,
 /// from the right edge for the panel (snippets, look). The deck's Bluetooth keyboard types; the on-screen one
@@ -139,32 +139,38 @@ struct TerminalScreen: View {
 }
 
 /// One connection, and the bridge between its terminal view and the SSH session.
-final class TerminalModel: ObservableObject, TerminalViewDelegate {
+@MainActor final class TerminalModel: ObservableObject {
     enum State: Equatable {
         case connecting, live, ended(String)
     }
+
+    /// One for every session: they all wear the same look, and Ghostty re-renders them together.
+    private static let controller = TerminalController(configuration: TerminalConfiguration(), theme: TerminalTheme())
 
     @Published var server: Server
     @Published private(set) var state = State.connecting
     /// Off by default: the deck's Bluetooth keyboard types.
     @Published private(set) var keyboardShown = false
     /// Owned here, not by the screen, so the scrollback survives switching away.
-    let box = TerminalBox()
-    var terminal: TerminalView { box.terminal }
+    let terminal = DeckTerminalView(frame: .zero)
     var close: () -> Void = {}
     var detected: (String) -> Void = { _ in }
     private let pad = ArrowPad()
+    /// Ghostty's end of the shell: the host's bytes go in, the keys it encodes come out.
+    private var io: InMemoryTerminalSession!
     private var session: Session?
     private var size = (cols: 80, rows: 24)
-    private var font: TermFont?
-    private var fontSize = 0.0
-    private var theme: Theme?
 
     init(server: Server) {
         self.server = server
-        terminal.terminalDelegate = self
-        terminal.inputAccessoryView = nil  // SwiftTerm's own key bar; ours is KeyBar
-        terminal.inputView = UIView()      // an empty keyboard, so a tap never raises the on-screen one
+        io = InMemoryTerminalSession(
+            write: { [weak self] data in Self.onMain { self?.input(Array(data)) } },
+            resize: { [weak self] viewport in
+                Self.onMain { self?.resized(cols: Int(viewport.columns), rows: Int(viewport.rows)) }
+            })
+        terminal.controller = Self.controller
+        terminal.configuration = TerminalSurfaceOptions(backend: .inMemory(io))
+        terminal.delegate = self
         pad.attach(to: terminal)
         connect()
     }
@@ -173,13 +179,17 @@ final class TerminalModel: ObservableObject, TerminalViewDelegate {
 
     func connect() {
         session?.close()
-        terminal.feed(text: "Connecting to \(server.user)@\(server.address)…\r\n")
+        io.receive("Connecting to \(server.user)@\(server.address)…\r\n")
         state = .connecting
         let session = Session()
         self.session = session
-        // Before the first layout the size is a guess; the layout's sizeChanged resizes the PTY.
+        let io = io!
+        // Before the first layout the size is a guess; the first viewport report resizes the PTY.
         session.start(server, cols: size.cols, rows: size.rows,
-            output: { [weak self] bytes in DispatchQueue.main.async { self?.received(bytes) } },
+            output: { [weak self] bytes in
+                io.receive(Data(bytes))  // parsed on Ghostty's own thread, off the main one
+                DispatchQueue.main.async { if self?.state == .connecting { self?.state = .live } }
+            },
             detected: { [weak self] system in DispatchQueue.main.async { self?.detected(system) } },
             ended: { [weak self] message in DispatchQueue.main.async { self?.ended(message) } })
     }
@@ -189,63 +199,56 @@ final class TerminalModel: ObservableObject, TerminalViewDelegate {
         session = nil
     }
 
-    /// The look, applied only when it changed: installing colors redraws the whole screen.
+    /// The look, applied to every session; unchanged values cost a comparison.
     func apply(font: TermFont, size: Double, theme: Theme) {
-        if self.font != font || fontSize != size {
-            (self.font, fontSize) = (font, size)
-            let normal = font.uiFont(size), bold = font.uiFont(size, bold: true)
-            terminal.setFonts(normal: normal, bold: bold, italic: normal.italic, boldItalic: bold.italic)
-        }
-        if self.theme != theme {
-            self.theme = theme
-            terminal.installColors(theme.ansi)
-            terminal.nativeForegroundColor = theme.foreground
-            terminal.nativeBackgroundColor = theme.background  // only the background setter redraws
-            terminal.caretColor = theme.cursor
-            terminal.selectedTextBackgroundColor = theme.selection
-        }
+        Self.controller.setTerminalConfiguration(TerminalConfiguration { config in
+            config.withFontFamily(font.family)
+            config.withFontSize(Float(size * 0.75))
+        })
+        Self.controller.setTheme(theme.ghostty)
     }
 
     func toggleKeyboard() {
         keyboardShown.toggle()
-        terminal.inputView = keyboardShown ? nil : UIView()  // nil is the system keyboard, an empty view none
+        terminal.keyboardShown = keyboardShown
         _ = terminal.becomeFirstResponder()
         terminal.reloadInputViews()
     }
 
-    private func received(_ bytes: ArraySlice<UInt8>) {
-        if state == .connecting { state = .live }
-        terminal.feed(byteArray: bytes)
-    }
+    /// Typed text and the key bar's bytes, sent as they are.
+    func send(_ text: String) { input(Array(text.utf8)) }
 
-    private func ended(_ message: String?) {
-        guard let message else { return close() }
-        state = .ended(message)
-        terminal.feed(text: "\r\n\u{1b}[33m\(message)\u{1b}[0m\r\nEnter: reconnect · Esc: close\r\n")
-    }
-
-    func send(source: TerminalView, data: ArraySlice<UInt8>) {
-        guard case .ended = state else { return session?.send(data) ?? () }
-        switch Array(data) {
+    /// Everything bound for the shell. Once it ended, Enter reconnects and Esc closes.
+    func input(_ bytes: [UInt8]) {
+        guard case .ended = state else { return session?.send(bytes[...]) ?? () }
+        switch bytes {
         case [13]: connect()
         case [27]: close()
         default: break
         }
     }
 
-    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-        size = (newCols, newRows)
-        session?.resize(cols: newCols, rows: newRows)
+    private func resized(cols: Int, rows: Int) {
+        size = (cols, rows)
+        session?.resize(cols: cols, rows: rows)
     }
 
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        if let url = URL(string: link) { UIApplication.shared.open(url) }
+    private func ended(_ message: String?) {
+        guard let message else { return close() }
+        state = .ended(message)
+        io.receive("\r\n\u{1b}[33m\(message)\u{1b}[0m\r\nEnter: reconnect · Esc: close\r\n")
     }
 
-    func setTerminalTitle(source: TerminalView, title: String) {}
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func scrolled(source: TerminalView, position: Double) {}
-    func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+    /// Ghostty calls back on its own threads; the model lives on the main one.
+    private nonisolated static func onMain(_ work: @escaping @MainActor () -> Void) {
+        if Thread.isMainThread { MainActor.assumeIsolated(work) } else { DispatchQueue.main.async { work() } }
+    }
+}
+
+extension TerminalModel: TerminalSurfaceOpenURLDelegate {
+    func terminalDidRequestOpenURL(_ url: String, kind: TerminalOpenURLKind) {
+        if let url = URL(string: url) { UIApplication.shared.open(url) }
+    }
 }
 
 extension TerminalModel.State {
@@ -258,37 +261,58 @@ extension TerminalModel.State {
     }
 }
 
-/// The terminal, wrapped to carry the app's ⌘ commands. Not on the terminal itself: SwiftTerm's canPerformAction
-/// refuses every action but its menu's and can't be overridden. UIKit asks this view next, up from the terminal.
-final class TerminalBox: UIView {
+/// Ghostty's view, with the on-screen keyboard only on request (the deck's Bluetooth keyboard types)
+/// and the app's ⌘ commands. Ghostty takes every press and never passes one up the responder chain,
+/// so a UIKeyCommand further up never fires: the commands are caught here, before it.
+final class DeckTerminalView: UITerminalView {
     struct Command {
         let input: String
         let title: String
         let action: () -> Void
     }
 
-    let terminal = TerminalView(frame: .zero)
     var commands: [Command] = []
+    var keyboardShown = false
+    private let noKeyboard = UIView()
+    /// Keys whose press ran a command, so Ghostty doesn't see their release either.
+    private var taken: Set<UIKeyboardHIDUsage> = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        terminal.frame = bounds
-        terminal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        addSubview(terminal)
+        inputAccessoryItems = []  // Ghostty's own key bar; ours is KeyBar
     }
 
-    required init?(coder: NSCoder) { nil }
+    override var inputView: UIView? { keyboardShown ? nil : noKeyboard }
 
-    override var keyCommands: [UIKeyCommand]? {
-        commands.map {
-            let command = UIKeyCommand(title: $0.title, action: #selector(run), input: $0.input, modifierFlags: .command)
-            command.wantsPriorityOverSystemBehavior = true  // ⌘W and ⌘, are the system's Close and Settings otherwise
-            return command
+    /// A tap keeps the focus for the hardware keyboard; the on-screen one comes only from the bar's key.
+    override func toggleSoftwareKeyboard() { _ = becomeFirstResponder() }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let rest = presses.filter { press in
+            guard let key = press.key, key.modifierFlags.contains(.command),
+                  let command = commands.first(where: { $0.input == key.charactersIgnoringModifiers }) else { return true }
+            taken.insert(key.keyCode)
+            command.action()
+            return false
         }
+        if !rest.isEmpty { super.pressesBegan(rest, with: event) }
     }
 
-    @objc private func run(_ command: UIKeyCommand) {
-        commands.first { $0.input == command.input }?.action()
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let rest = untaken(presses)
+        if !rest.isEmpty { super.pressesEnded(rest, with: event) }
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let rest = untaken(presses)
+        if !rest.isEmpty { super.pressesCancelled(rest, with: event) }
+    }
+
+    private func untaken(_ presses: Set<UIPress>) -> Set<UIPress> {
+        presses.filter { press in
+            guard let code = press.key?.keyCode else { return true }
+            return taken.remove(code) == nil
+        }
     }
 }
 
@@ -298,25 +322,20 @@ private struct TerminalHost: UIViewRepresentable {
     let fontSize: Double
     let font: TermFont
     let theme: Theme
-    let commands: [TerminalBox.Command]
+    let commands: [DeckTerminalView.Command]
 
     func makeUIView(context: Context) -> UIView { UIView() }
 
     func updateUIView(_ host: UIView, context: Context) {
-        let box = model.box
-        box.commands = commands
+        let terminal = model.terminal
+        terminal.commands = commands
         model.apply(font: font, size: fontSize, theme: theme)
-        guard box.superview !== host else { return }
+        guard terminal.superview !== host else { return }
         host.subviews.forEach { $0.removeFromSuperview() }
-        box.frame = host.bounds
-        box.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        host.addSubview(box)
-        DispatchQueue.main.async {
-            _ = box.terminal.becomeFirstResponder()
-            // Back in a window, SwiftTerm repaints only the rows that changed since, often none, so the screen stayed
-            // blank. Setting a color is its public way to repaint every row.
-            box.terminal.nativeBackgroundColor = box.terminal.nativeBackgroundColor
-        }
+        terminal.frame = host.bounds
+        terminal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        host.addSubview(terminal)
+        DispatchQueue.main.async { _ = terminal.becomeFirstResponder() }
     }
 }
 
@@ -324,11 +343,11 @@ private struct TerminalHost: UIViewRepresentable {
 final class ArrowPad: NSObject, UIGestureRecognizerDelegate {
     enum Arrow { case left, right, up, down }
 
-    private weak var view: TerminalView?
+    private weak var view: UITerminalView?
     private var anchor = CGPoint.zero
     private let tick = UISelectionFeedbackGenerator()
 
-    func attach(to view: TerminalView) {
+    func attach(to view: UITerminalView) {
         self.view = view
         let hold = UILongPressGestureRecognizer(target: self, action: #selector(held))
         hold.minimumPressDuration = 0.3
@@ -345,14 +364,14 @@ final class ArrowPad: NSObject, UIGestureRecognizerDelegate {
             tick.selectionChanged()
         case .changed, .ended:  // a quick flick can arrive only with the lift
             let arrows = Self.arrows(from: &anchor, to: point)
-            // A finger held still first also opened SwiftTerm's copy and paste menu (a UIMenuController); sliding means arrows.
-            if !arrows.isEmpty { UIMenuController.shared.hideMenu() }
+            // A finger held still long enough also starts Ghostty's selection; sliding means arrows, so it stops.
+            if !arrows.isEmpty { cancelOthers(than: hold) }
             for arrow in arrows {
                 switch arrow {
-                case .left: view?.sendKeyLeft()
-                case .right: view?.sendKeyRight()
-                case .up: view?.sendKeyUp()
-                case .down: view?.sendKeyDown()
+                case .left: _ = view?.sendKey(.arrowLeft)
+                case .right: _ = view?.sendKey(.arrowRight)
+                case .up: _ = view?.sendKey(.arrowUp)
+                case .down: _ = view?.sendKey(.arrowDown)
                 }
                 tick.selectionChanged()
             }
@@ -377,7 +396,15 @@ final class ArrowPad: NSObject, UIGestureRecognizerDelegate {
         }
     }
 
-    /// Alongside SwiftTerm's own long press, whose copy and paste menu still opens when the finger stays put.
+    /// Toggling a recognizer off and on cancels whatever gesture it was tracking.
+    private func cancelOthers(than hold: UIGestureRecognizer) {
+        for other in view?.gestureRecognizers ?? [] where other !== hold && [.began, .changed].contains(other.state) {
+            other.isEnabled = false
+            other.isEnabled = true
+        }
+    }
+
+    /// Alongside Ghostty's own long press, whose selection and menu still come when the finger stays put.
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         other is UILongPressGestureRecognizer
@@ -414,17 +441,18 @@ private struct KeyBar: View {
                 if case .ended = model.state {
                     key("connect", "Reconnect") { model.connect() }
                 }
-                key("esc", "Escape") { model.terminal.send([0x1b]) }
-                key("tab", "Tab") { model.terminal.send([0x09]) }
-                key("^C", "Control C") { model.terminal.send([0x03]) }
-                key("^D", "Control D") { model.terminal.send([0x04]) }
-                key("^Z", "Control Z") { model.terminal.send([0x1a]) }
-                key("|", "Pipe") { model.terminal.send(txt: "|") }
-                key("~", "Tilde") { model.terminal.send(txt: "~") }
-                key("←", "Left") { model.terminal.sendKeyLeft() }
-                key("↓", "Down") { model.terminal.sendKeyDown() }
-                key("↑", "Up") { model.terminal.sendKeyUp() }
-                key("→", "Right") { model.terminal.sendKeyRight() }
+                key("esc", "Escape") { model.input([0x1b]) }
+                key("tab", "Tab") { model.input([0x09]) }
+                key("^C", "Control C") { model.input([0x03]) }
+                key("^D", "Control D") { model.input([0x04]) }
+                key("^Z", "Control Z") { model.input([0x1a]) }
+                key("|", "Pipe") { model.send("|") }
+                key("~", "Tilde") { model.send("~") }
+                // Through Ghostty, which knows whether the program wants cursor or application arrows.
+                key("←", "Left") { _ = model.terminal.sendKey(.arrowLeft) }
+                key("↓", "Down") { _ = model.terminal.sendKey(.arrowDown) }
+                key("↑", "Up") { _ = model.terminal.sendKey(.arrowUp) }
+                key("→", "Right") { _ = model.terminal.sendKey(.arrowRight) }
                 icon(model.keyboardShown ? "keyboard.chevron.compact.down" : "keyboard",
                      model.keyboardShown ? "Hide keyboard" : "Show keyboard", model.toggleKeyboard)
                 icon("sidebar.right", "Panel", panel)
@@ -670,7 +698,7 @@ private struct SidePanel: View {
     }
 
     private func send(_ command: String, run: Bool) {
-        model.terminal.send(txt: run ? command + "\r" : command)
+        model.send(run ? command + "\r" : command)
         hide()
     }
 }

@@ -34,7 +34,7 @@ security list-keychains -d user -s "$KEYCHAIN" $ORIGINAL
 
 xcodegen generate --quiet
 rm -rf "$ARCHIVE" "$EXPORT"
-# SwiftTerm runs a build-tool plugin; Xcode asks to trust it once, the command line needs the skip flag.
+# Xcode asks once to trust package plugins and macros; the command line can't answer, so it skips the check.
 xcodebuild archive -project DeckTerm.xcodeproj -scheme DeckTerm -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" -skipPackagePluginValidation -skipMacroValidation \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" DECKTERM_SIGN_STYLE=Manual DECKTERM_SIGN_IDENTITY="$SIGNING_CERT" \
