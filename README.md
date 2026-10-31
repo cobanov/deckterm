@@ -5,8 +5,8 @@ The terminal is [libghostty](https://ghostty.org), Ghostty's core, drawn with Me
 Site: [deckterm.cobanov.dev](https://deckterm.cobanov.dev).
 
 The iPhone stays in landscape unless Settings picks Portrait or Auto; the iPad turns and resizes freely. The
-Bluetooth keyboard types, so the on-screen keyboard stays hidden until the keyboard key in the bar or Settings brings it
-up, and it stays as last chosen. Saved devices show as cards; tap one, or press ⌘1–9, to open its terminal (⌘N adds a
+Bluetooth keyboard types, so the on-screen keyboard stays hidden unless the keyboard key in the bar brings it up; with
+On-screen keyboard on in Settings, it comes up with every tap, new tab or pane, even after the key put it away. Saved devices show as cards; tap one, or press ⌘1–9, to open its terminal (⌘N adds a
 device). A device can have any number of connections: ⌘T opens another in a new tab, ⌘D splits the screen in two with
 another beside it, ⌘[ ⌘] move between panes, and a tap on the tab showing opens its menu (split, new tab, close a pane
 or the tab). While connections are open, a tab bar under the cards (iOS 26's floating glass one) switches between

@@ -112,12 +112,28 @@ enum BarKey: String, CaseIterable, Identifiable {
 enum Rotation: String, CaseIterable {
     case landscape, portrait, auto
 
+    /// nil on iPad.
+    private static var chosen: Rotation? {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return nil }
+        return UserDefaults.standard.string(forKey: "orientation").flatMap(Rotation.init) ?? .landscape
+    }
+
     static var mask: UIInterfaceOrientationMask {
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
-        switch UserDefaults.standard.string(forKey: "orientation").flatMap(Rotation.init) ?? .landscape {
-        case .landscape: return .landscape
-        case .portrait: return .portrait
-        case .auto: return .allButUpsideDown
+        switch chosen {
+        case nil: .all
+        case .landscape: .landscape
+        case .portrait: .portrait
+        case .auto: .allButUpsideDown
+        }
+    }
+
+    /// Whether a scene in `orientation` stays that way: the one Settings chose, and in Auto the way the phone is held.
+    static func stands(_ orientation: UIInterfaceOrientation, held: UIDeviceOrientation = UIDevice.current.orientation) -> Bool {
+        switch chosen {
+        case nil: true
+        case .landscape: orientation.isLandscape
+        case .portrait: orientation.isPortrait
+        case .auto: held == .portrait ? orientation.isPortrait : held.isLandscape ? orientation.isLandscape : true
         }
     }
 
@@ -138,6 +154,24 @@ enum Rotation: String, CaseIterable {
                 controller = current.presentedViewController
             }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+        }
+    }
+}
+
+/// Calls `ended` as each turn of the screen finishes, after iOS's own animation; the scene reports the new
+/// orientation as the turn starts.
+struct TurnEnd: UIViewControllerRepresentable {
+    let ended: () -> Void
+
+    func makeUIViewController(context: Context) -> Watcher { Watcher() }
+    func updateUIViewController(_ watcher: Watcher, context: Context) { watcher.ended = ended }
+
+    final class Watcher: UIViewController {
+        var ended: () -> Void = {}
+
+        override func viewWillTransition(to size: CGSize, with coordinator: any UIViewControllerTransitionCoordinator) {
+            super.viewWillTransition(to: size, with: coordinator)
+            coordinator.animate(alongsideTransition: nil) { [weak self] _ in self?.ended() }
         }
     }
 }
@@ -215,7 +249,7 @@ struct SettingsScreen: View {
                 } header: {
                     Text("Screen")
                 } footer: {
-                    Text("Landscape is how the deck holds the phone; Auto turns with it. The on-screen keyboard stays off for the deck's own keyboard; the key bar's keyboard button switches it too, and DeckTerm keeps the last choice.")
+                    Text("Landscape is how the deck holds the phone; Auto turns with it. With the on-screen keyboard off, it shows only from the key bar's keyboard button; on, it comes up with every tap, new tab or pane, even after the button put it away.")
                 }
                 if let store {
                     Section("Backup") {

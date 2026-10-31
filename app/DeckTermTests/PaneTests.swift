@@ -12,11 +12,39 @@ final class PaneTests: XCTestCase {
                        "upright, two panes stack")
     }
 
+    func testLaunchWaitsForTheChosenOrientation() {
+        defer { UserDefaults.standard.removeObject(forKey: "orientation") }
+        UserDefaults.standard.removeObject(forKey: "orientation")
+        XCTAssertTrue(Rotation.stands(.landscapeRight, held: .portrait), "landscape by default, however it's held")
+        XCTAssertFalse(Rotation.stands(.portrait, held: .portrait))
+        UserDefaults.standard.set("portrait", forKey: "orientation")
+        XCTAssertFalse(Rotation.stands(.landscapeLeft, held: .landscapeLeft))
+        UserDefaults.standard.set("auto", forKey: "orientation")
+        XCTAssertFalse(Rotation.stands(.landscapeRight, held: .portrait), "Auto waits for the turn to how it's held")
+        XCTAssertTrue(Rotation.stands(.portrait, held: .portrait))
+        XCTAssertTrue(Rotation.stands(.landscapeRight, held: .faceUp), "flat on a table: no turn to wait for")
+    }
+
     func testKeyRowsComeOutEven() {
         XCTAssertTrue(KeyRows.shape(12, width: 386) == (2, 6), "12 keys upright: two rows of six, not seven and five")
         XCTAssertTrue(KeyRows.shape(13, width: 386) == (2, 7))
         XCTAssertTrue(KeyRows.shape(5, width: 386) == (1, 5))
         XCTAssertTrue(KeyRows.shape(3, width: 10) == (3, 1), "narrower than one key: one per row")
+    }
+
+    @MainActor func testKeyboardFollowsTheSetting() throws {
+        defer { UserDefaults.standard.removeObject(forKey: "keyboardShown") }
+        let sessions = Sessions()
+        sessions.show(Server(address: "127.0.0.1", port: 1, user: "nobody"))
+        let terminal = try XCTUnwrap(sessions.active).terminal
+        UserDefaults.standard.set(false, forKey: "keyboardShown")
+        terminal.tookKeys()
+        XCTAssertFalse(sessions.keyboardUp, "off: only the bar's key raises it")
+        UserDefaults.standard.set(true, forKey: "keyboardShown")
+        sessions.keyboardUp = false  // put away with the bar's key
+        terminal.tookKeys()
+        XCTAssertTrue(sessions.keyboardUp, "on: a tap or a new pane brings it back")
+        sessions.sync([])
     }
 
     /// Port 1 refuses at once: the panes stay open with an error, and nothing logs in.

@@ -2,11 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Black like the app, which is always dark: the generated screen was white on a phone in light mode. -->
+	<!-- The icon's hinge mark on black, like the app, which is always dark: the generated screen was white on a phone in
+	     light mode. ServerList draws the mark again and fades it into the list. -->
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchMark</string>
 	</dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>

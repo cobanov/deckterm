@@ -36,6 +36,12 @@ struct ServerList: View {
     @State private var settingsShown = false
     @State private var notice: String?
     @State private var connectionsShown = false
+    /// The launch screen's mark, drawn again where it stood, in place of the list until the scene stands as
+    /// Settings asks (Rotation.stands). Info.plist opens the iPhone sideways, so set to Portrait it opens so and
+    /// iOS turns it whatever the app does; its own launch screen turns upright, the list waits on black.
+    @State private var splash = true
+    /// The app's first frame comes sideways too, and a mark drawn there jumped about as the scene turned.
+    @State private var turning = false
 
     var body: some View {
         Group {
@@ -54,6 +60,14 @@ struct ServerList: View {
                 .onChange(of: sessions.tabs.isEmpty) { _, empty in if empty { connectionsShown = false } }
             }
         }
+        .opacity(splash ? 0 : 1)
+        .overlay {
+            // Centered on the whole screen, as the launch screen draws it, not within the safe area.
+            if splash && !turning {
+                Image("LaunchMark").frame(maxWidth: .infinity, maxHeight: .infinity).ignoresSafeArea()
+            }
+        }
+        .background(TurnEnd(ended: reveal))
         .tint(theme.accent)
         .sheet(item: $editing) { ServerForm(server: $0, store: store) }
         .sheet(isPresented: $settingsShown) { SettingsScreen(store: store) }
@@ -62,7 +76,11 @@ struct ServerList: View {
         }
         .onChange(of: store.servers) { _, servers in sessions.sync(servers) }
         .onAppear {
-            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene { housing.watch(scene) }
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                housing.watch(scene)
+                if Rotation.stands(scene.effectiveGeometry.interfaceOrientation) { reveal() } else { turning = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: reveal)  // a turn that never came
+            }
             sessions.detected = { [store] id, system in
                 guard var server = store.servers.first(where: { $0.id == id }), server.system != system else { return }
                 server.system = system
@@ -84,6 +102,11 @@ struct ServerList: View {
     }
 
     /// The device at this place in the list, connected or brought back.
+    private func reveal() {
+        guard splash else { return }
+        withAnimation(.easeInOut(duration: 0.35)) { splash = false }
+    }
+
     private func open(_ index: Int) {
         if store.servers.indices.contains(index) { sessions.show(store.servers[index]) }
     }

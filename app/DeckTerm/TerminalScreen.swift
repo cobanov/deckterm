@@ -3,7 +3,7 @@ import GhosttyTerminal
 
 /// Full-screen terminal with a thin key bar under it. Swipe in from the left edge to go back,
 /// from the right edge for the panel (snippets, files). The deck's Bluetooth keyboard types; the on-screen one
-/// shows only from the bar's key. Hold a finger on the terminal and slide it for arrow keys.
+/// follows Settings and the bar's key (Sessions.keyboardUp). Hold a finger on the terminal and slide it for arrow keys.
 /// Going back keeps the session open: the bar's tabs, the list and ⌘1–9 switch between them. ⌘T opens another
 /// connection to the device in a tab, ⌘D beside it in the same tab, and ⌘[ ⌘] move between panes.
 struct TerminalScreen: View {
@@ -15,6 +15,7 @@ struct TerminalScreen: View {
     @AppStorage("font") private var font = TermFont.jetBrains
     @AppStorage("theme") private var theme = Theme.classic
     @AppStorage("tutorialSeen") private var tutorialSeen = false
+    /// Settings' "On-screen keyboard": whether a terminal taking the keys brings the keyboard up.
     @AppStorage("keyboardShown") private var keyboardShown = false
     @State private var panelShown = false
     @State private var panelDrag: CGFloat = 0
@@ -30,7 +31,7 @@ struct TerminalScreen: View {
             VStack(spacing: 0) {
                 PaneGrid {
                     ForEach(sessions.panes(with: model)) { pane in
-                        TerminalHost(model: pane, focused: pane === model, keyboardShown: keyboardShown,
+                        TerminalHost(model: pane, focused: pane === model, keyboardShown: sessions.keyboardUp,
                                      fontSize: fontSize, font: font, theme: theme, commands: commands(model))
                             // Dimmed while another pane has the keys, as Ghostty does.
                             .overlay { theme.bg.opacity(pane === model ? 0 : 0.35).allowsHitTesting(false) }
@@ -90,6 +91,7 @@ struct TerminalScreen: View {
         .fullScreenCover(isPresented: $filesShown, onDismiss: focus) {
             FilesScreen(model: model, theme: theme, font: font) { filesShown = false }
         }
+        .onChange(of: keyboardShown) { sessions.keyboardUp = keyboardShown }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
@@ -156,6 +158,10 @@ struct TerminalScreen: View {
             }
         }
     }
+    /// The on-screen keyboard, for now. With Settings' "On-screen keyboard" on, every terminal taking the keys
+    /// brings it up (a tap, a new tab or pane, back from the list or a sheet), even after the bar's key put it away;
+    /// off, only the bar's key does. The key never changes the setting.
+    @Published var keyboardUp = false
     /// The last one on screen, kept through the screen's closing animation.
     private(set) var shown: TerminalModel?
     /// A connection learned what its host runs: (device id, logo name).
@@ -228,7 +234,9 @@ struct TerminalScreen: View {
         model.detected = { [weak self] system in self?.detected(server.id, system) }
         // A tap on another pane gives it the keys; the bar and the panel follow.
         model.terminal.tookKeys = { [weak self, weak model] in
-            guard let self, let model, self.active != nil, self.active !== model else { return }
+            guard let self, let model else { return }
+            if UserDefaults.standard.bool(forKey: "keyboardShown") && !self.keyboardUp { self.keyboardUp = true }
+            guard self.active != nil, self.active !== model else { return }
             self.active = model
         }
         return model
@@ -372,8 +380,8 @@ final class DeckTerminal: UITerminalView {
     /// An empty keyboard while hidden, so focus never raises the on-screen one; nil is the system keyboard.
     override var inputView: UIView? { keyboardShown ? nil : noKeyboard }
 
-    /// A tap still clicks, but only focuses: the keyboard follows the bar's key, and resigning would cut off the
-    /// Bluetooth keyboard too.
+    /// A tap still clicks, but only focuses (and so raises the keyboard when Settings says so, see
+    /// Sessions.keyboardUp): resigning would cut off the Bluetooth keyboard too.
     override func toggleSoftwareKeyboard() { _ = becomeFirstResponder() }
 
     override func becomeFirstResponder() -> Bool {
@@ -585,8 +593,6 @@ private struct KeyBar: View {
     let font: TermFont
     let panel: () -> Void
     @AppStorage("barKeys") private var barKeys = BarKey.store(BarKey.standard)
-    /// Off by default, the deck's Bluetooth keyboard types; kept as last chosen here or in Settings.
-    @AppStorage("keyboardShown") private var keyboardShown = false
 
     var body: some View {
         // One row when the keys fit beside a little room for the tabs. Narrower (a phone held upright, a slim iPad
@@ -639,10 +645,11 @@ private struct KeyBar: View {
     }
 
     @ViewBuilder private var icons: some View {
-        icon(keyboardShown ? "keyboard.chevron.compact.down" : "keyboard",
-             keyboardShown ? "Hide keyboard" : "Show keyboard") {
-            keyboardShown.toggle()
-            _ = model.terminal.becomeFirstResponder()
+        icon(sessions.keyboardUp ? "keyboard.chevron.compact.down" : "keyboard",
+             sessions.keyboardUp ? "Hide keyboard" : "Show keyboard") {
+            let up = !sessions.keyboardUp
+            _ = model.terminal.becomeFirstResponder()  // which raises it when Settings says so; the press decides
+            sessions.keyboardUp = up
         }
         icon("sidebar.right", "Panel", panel)
     }

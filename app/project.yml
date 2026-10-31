@@ -44,10 +44,10 @@ targets:
         INFOPLIST_FILE: DeckTerm/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: DeckTerm
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        # Every way up, so the launch screen opens as the phone is held and never turns once the app is up: with
-        # landscape alone, an upright phone set to Portrait or Auto opened sideways and then turned. AppDelegate keeps
-        # the app to the orientation Settings chose (landscape by default).
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationLandscapeRight UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationPortrait
+        # Landscape alone, so even a phone held upright opens sideways at once, as the deck holds it; with portrait
+        # here it opened upright and turned. AppDelegate then keeps the app to Settings' choice (landscape by
+        # default); set to Portrait or Auto, the list waits on black while the scene turns (Rotation.settle).
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationLandscapeRight UIInterfaceOrientationLandscapeLeft
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: DeckTerm connects to SSH servers on your local network.
         # Only standard SSH crypto, as herdrchat declares for the same stack.
