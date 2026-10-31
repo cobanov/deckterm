@@ -202,6 +202,29 @@ extension View {
     }
 }
 
+/// A symbol on a raised key: the side panel's and the files' buttons, one size so their rows match.
+struct IconKey: View {
+    let symbol: String
+    let label: LocalizedStringKey
+    let theme: Theme
+    let action: () -> Void
+
+    init(_ symbol: String, _ label: LocalizedStringKey, theme: Theme, action: @escaping () -> Void) {
+        (self.symbol, self.label, self.theme, self.action) = (symbol, label, theme, action)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 32, height: 30)
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
 /// Full-width capsule button; the primary one is the theme's foreground, inverted.
 struct PillStyle: ButtonStyle {
     let theme: Theme

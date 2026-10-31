@@ -68,17 +68,20 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(Pins.get(server.pinKey), "SHA256:not-this-host", "a mismatch must not overwrite the pin")
     }
 
+    /// A session whose connection is up, for SFTP beside the shell.
+    @MainActor private func connected() async throws -> Session {
+        let session = Session()
+        session.start(server, cols: 80, rows: 24, output: { _ in }, detected: { _ in }, ended: { _ in })
+        for _ in 0..<100 where session.client == nil { try await Task.sleep(for: .milliseconds(100)) }
+        _ = try XCTUnwrap(session.client)
+        return session
+    }
+
     /// Up and back down over the shell's own connection, in more than one piece, and never over a file already there.
     @MainActor func testFilesRoundTrip() async throws {
-        let session = Session()
+        let session = try await connected()
         defer { session.close() }
-        session.start(server, cols: 80, rows: 24, output: { _ in }, detected: { _ in }, ended: { _ in })
-        var client = session.client
-        for _ in 0..<100 where client == nil {
-            try await Task.sleep(for: .milliseconds(100))
-            client = session.client
-        }
-        let sftp = try await XCTUnwrap(client).openSFTP()
+        let sftp = try await XCTUnwrap(session.client).openSFTP()
         let local = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let bytes = Data((0..<600_000).map { UInt8($0 % 251) })
         try bytes.write(to: local)
@@ -92,5 +95,16 @@ final class SessionTests: XCTestCase {
         try await sftp.download(remote, to: local.appendingPathExtension("back"))
         try await sftp.remove(at: remote)
         XCTAssertEqual(try Data(contentsOf: local.appendingPathExtension("back")), bytes)
+    }
+
+    /// Citadel leaves every listed folder open, and sftp-server holds a file for each (256 on a Mac): a long session
+    /// lists more than that.
+    @MainActor func testManyListingsKeepWorking() async throws {
+        let session = try await connected()
+        defer { session.close() }
+        let files = RemoteFiles { session.client }
+        for _ in 0..<300 { await files.load() }
+        XCTAssertNil(files.failure)
+        XCTAssertFalse(files.entries.isEmpty)
     }
 }

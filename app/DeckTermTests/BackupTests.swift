@@ -71,6 +71,22 @@ final class BackupTests: XCTestCase {
     }
 }
 
+/// An RSA key is refused when it's pasted, by name, not at every login after. The key is only the header that says
+/// "ssh-rsa", which is all the check reads.
+final class KeyTests: XCTestCase {
+    func testRSAKeysAreRefusedByName() {
+        func string(_ text: String) -> [UInt8] { withUnsafeBytes(of: UInt32(text.utf8.count).bigEndian, Array.init) + Array(text.utf8) }
+        let header = Array("openssh-key-v1\0".utf8) + string("none") + string("none") + string("") + [0, 0, 0, 1, 0, 0, 0, 11] + string("ssh-rsa")
+        let pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n\(Data(header).base64EncodedString())\n-----END OPENSSH PRIVATE KEY-----\n"
+        XCTAssertThrowsError(try Session.keyAuth(user: "me", pem: pem, passphrase: nil)) {
+            XCTAssertTrue($0.localizedDescription.contains("RSA"), $0.localizedDescription)
+        }
+        XCTAssertThrowsError(try Session.keyAuth(user: "me", pem: "not a key", passphrase: nil)) {
+            XCTAssertFalse($0.localizedDescription.contains("RSA"), $0.localizedDescription)
+        }
+    }
+}
+
 /// What `uname -s; cat /etc/os-release` prints on each kind of host, and the logo it picks.
 final class SystemTests: XCTestCase {
     func testLogoFromOutput() {

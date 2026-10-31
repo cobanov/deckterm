@@ -53,7 +53,7 @@
     <p>On the first connection DeckTerm remembers the server's host key. See <a href="#host-key">host key warnings</a> for what happens if it changes.</p>
 
     <h2 id="keys">How do I use an SSH key?</h2>
-    <p>DeckTerm uses one OpenSSH private key for all your devices: ed25519 or RSA, with an optional passphrase. The matching public key must be in <code>~/.ssh/authorized_keys</code> on each server.</p>
+    <p>DeckTerm uses one OpenSSH private key for all your devices: ed25519, with an optional passphrase. RSA keys don't work: DeckTerm would sign with SHA-1, which OpenSSH 8.8 and later refuse. <code>ssh-keygen -t ed25519</code> makes a new key. The matching public key must be in <code>~/.ssh/authorized_keys</code> on each server.</p>
     <ol>
       <li>If you don't have a key yet, create one on your computer with <code>ssh-keygen -t ed25519</code>, then add it to a server with <code>ssh-copy-id user@server</code>.</li>
       <li>Copy the private key. On a Mac: <code>pbcopy &lt; ~/.ssh/id_ed25519</code></li>

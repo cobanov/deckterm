@@ -17,7 +17,8 @@ Catppuccin, Dracula, Gruvbox, Nord, Tokyo Night, Solarized and three black ones)
 iPhone's rotation. ⌘W goes back, ⌘= and ⌘- resize the text, ⌘, opens the panel. The bundled fonts are SIL OFL; their
 licenses sit beside them in `app/DeckTerm/Fonts/`.
 
-One private key serves every device: run `pbcopy < ~/.ssh/id_ed25519` on the Mac and paste it under the key button.
+One ed25519 private key serves every device: run `pbcopy < ~/.ssh/id_ed25519` on the Mac and paste it under the key
+button. RSA keys are refused when pasted, since Citadel signs them with SHA-1, which OpenSSH 8.8 and later reject.
 A device with a password uses that instead. Host keys are pinned on first connect, and a changed key is refused.
 
 The `…` menu above the cards exports a backup (`deckterm-backup.json`: devices, pinned host keys, theme, font, snippets, the bar's keys)

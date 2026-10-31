@@ -60,7 +60,6 @@ final class Session: @unchecked Sendable {
                 settings.group = group
                 let client = try await SSHClient.connect(to: settings)
                 await MainActor.run { self.client = client }
-                Task { if let system = await Self.system(of: client) { detected(system) } }
                 let pty = SSHChannelRequestEvent.PseudoTerminalRequest(
                     wantReply: true,
                     term: "xterm-256color",
@@ -72,6 +71,8 @@ final class Session: @unchecked Sendable {
                 )
                 do {
                     try await client.withPTY(pty) { inbound, outbound in
+                        // Once the shell has its channel: a host allowing one per connection would refuse it otherwise.
+                        Task { if let system = await Self.system(of: client) { detected(system) } }
                         try await withThrowingTaskGroup(of: Void.self) { tasks in
                             tasks.addTask {
                                 for await event in events {
@@ -137,13 +138,16 @@ final class Session: @unchecked Sendable {
         return try keyAuth(user: server.user, pem: pem, passphrase: Keychain.get("passphrase"))
     }
 
-    /// ed25519 first, RSA for older keys. The key form calls this to check a pasted key.
+    /// ed25519 only: Citadel signs with RSA through SHA-1, which OpenSSH 8.8 and later refuse, so an RSA key is
+    /// named here rather than failing every login. The key form calls this to check a pasted key.
     static func keyAuth(user: String, pem: String, passphrase: String?) throws -> SSHAuthenticationMethod {
-        let decryptionKey = passphrase.map { Data($0.utf8) }
-        if let key = try? Curve25519.Signing.PrivateKey(sshEd25519: pem, decryptionKey: decryptionKey) {
+        if let key = try? Curve25519.Signing.PrivateKey(sshEd25519: pem, decryptionKey: passphrase.map { Data($0.utf8) }) {
             return .ed25519(username: user, privateKey: key)
         }
-        return .rsa(username: user, privateKey: try Insecure.RSA.PrivateKey(sshRsa: pem, decryptionKey: decryptionKey))
+        if (try? SSHKeyDetection.detectPrivateKeyType(from: pem)) == .rsa {
+            throw Failure(errorDescription: String(localized: "DeckTerm can't use RSA keys: it would sign with SHA-1, which OpenSSH 8.8 and later refuse. Make an ed25519 key with `ssh-keygen -t ed25519` and add its public half to each server."))
+        }
+        throw Failure(errorDescription: String(localized: "Couldn't read the key. Paste an ed25519 key in OpenSSH format with its BEGIN and END lines, and its passphrase if it has one."))
     }
 
     private static func describe(_ error: Error, presented: String?) -> String {

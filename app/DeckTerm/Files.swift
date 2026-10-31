@@ -21,6 +21,9 @@ import NIOCore
     @Published var failure: String?
     private let connection: () -> SSHClient?
     private var sftp: SFTPClient?
+    /// shortcut: Citadel 0.12.1 never closes a folder it lists, and sftp-server holds a file open for each (256 on a
+    /// Mac), so every 100th listing closes the channel for a fresh one; drop this once Citadel closes the handle.
+    private var listings = 0
 
     init(connection: @escaping () -> SSHClient?) {
         self.connection = connection
@@ -33,6 +36,8 @@ import NIOCore
         await run(String(localized: "Loading…")) { sftp in
             let target = try await sftp.getRealPath(atPath: path ?? (self.path.isEmpty ? "." : self.path))
             let names = try await sftp.listDirectory(atPath: target)
+            self.listings += 1
+            if self.listings % 100 == 0 { try? await sftp.close() }
             self.path = target
             self.entries = names.flatMap(\.components)
                 .filter { $0.filename != "." && $0.filename != ".." }
@@ -48,17 +53,18 @@ import NIOCore
         return (try? await client().getAttributes(at: child(entry.name)))?.isFolder ?? false
     }
 
-    /// Into a fresh temporary folder, for the share sheet.
+    /// Into a fresh temporary folder, for the share sheet, which deletes it when it closes.
     func download(_ entry: Entry) async -> URL? {
-        var saved: URL?
-        await run(String(localized: "Downloading \(entry.name)…")) { sftp in
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let url = folder.appendingPathComponent(entry.name)
+        if await run(String(localized: "Downloading \(entry.name)…"), { sftp in
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let url = folder.appendingPathComponent(entry.name)
             try await sftp.download(self.child(entry.name), to: url)
-            saved = url
+        }) {
+            return url
         }
-        return saved
+        try? FileManager.default.removeItem(at: folder)  // what a failed download left
+        return nil
     }
 
     func upload(_ urls: [URL]) async {
@@ -103,17 +109,18 @@ import NIOCore
         guard busy == nil else { return false }
         busy = label
         defer { busy = nil }
+        // A refusal comes bare or wrapped; its message is the server's own ("Permission denied"), NSError's isn't.
         do {
             try await work(try await client())
             return true
+        } catch let status as SFTPMessage.Status where !status.message.isEmpty {
+            failure = status.message
+        } catch SFTPError.errorStatus(let status) where !status.message.isEmpty {
+            failure = status.message
         } catch {
-            if case SFTPError.errorStatus(let status) = error, !status.message.isEmpty {
-                failure = status.message
-            } else {
-                failure = error.localizedDescription
-            }
-            return false
+            failure = error.localizedDescription
         }
+        return false
     }
 
     /// Opened on first use and again after a reconnect.
@@ -185,7 +192,7 @@ struct FilesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                icon("chevron.up", "Up") { Task { await files.load(files.path + "/..") } }
+                IconKey("chevron.up", "Up", theme: theme) { Task { await files.load(files.path + "/..") } }
                     .disabled(files.path.isEmpty || files.path == "/")
                 Text(verbatim: files.path)
                     .font(font.font(11))
@@ -193,12 +200,12 @@ struct FilesView: View {
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 4)
-                icon("arrow.clockwise", "Refresh") { Task { await files.load() } }
-                icon("folder.badge.plus", "New folder") { name = ""; naming = .folder }
+                IconKey("arrow.clockwise", "Refresh", theme: theme) { Task { await files.load() } }
+                IconKey("folder.badge.plus", "New folder", theme: theme) { name = ""; naming = .folder }
                     .disabled(files.path.isEmpty)
-                icon("square.and.arrow.up", "Upload") { importing = true }
+                IconKey("square.and.arrow.up", "Upload", theme: theme) { importing = true }
                     .disabled(files.path.isEmpty)
-                icon(corner.symbol, corner.label, corner.action)
+                IconKey(corner.symbol, corner.label, theme: theme, action: corner.action)
             }
             if let failure = files.failure {
                 Text(verbatim: failure)
@@ -228,7 +235,7 @@ struct FilesView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { Task { await files.upload(urls) } }
         }
-        .sheet(isPresented: Binding(get: { shared != nil }, set: { if !$0 { shared = nil } })) {
+        .sheet(isPresented: Binding(get: { shared != nil }, set: { if !$0 { discard() } })) {
             if let shared { ShareSheet(url: shared).presentationDetents([.medium, .large]) }
         }
         .alert(naming.map { if case .rename = $0 { "Rename" } else { "New folder" } } ?? "",
@@ -294,6 +301,12 @@ struct FilesView: View {
         Task { shared = await files.download(entry) }
     }
 
+    /// The downloaded copy goes when the share sheet closes; whatever it was shared to has its own by then.
+    private func discard() {
+        if let shared { try? FileManager.default.removeItem(at: shared.deletingLastPathComponent()) }
+        shared = nil
+    }
+
     private func commitName() {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !name.contains("/"), let naming else { return }
@@ -304,17 +317,6 @@ struct FilesView: View {
             case .rename: break
             }
         }
-    }
-
-    private func icon(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 30, height: 28)
-                .background(theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 }
 

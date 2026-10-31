@@ -30,6 +30,7 @@ struct ServerList: View {
     @AppStorage("theme") private var theme = Theme.classic
     @AppStorage("font") private var font = TermFont.jetBrains
     @State private var editing: Server?
+    @State private var deleting: Server?
     @State private var keyShown = false
     @State private var importing = false
     @State private var aboutShown = false
@@ -62,6 +63,13 @@ struct ServerList: View {
             }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json], onCompletion: restore)
+        .confirmationDialog(Text(verbatim: deleting?.title ?? ""),
+                            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible, presenting: deleting) { server in
+            Button("Delete", role: .destructive) { store.delete(server) }
+        } message: { _ in
+            Text("Its saved password goes too, and an open session hangs up.")
+        }
         .alert("Backup", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
         } message: {
             Text(notice ?? "")
@@ -158,7 +166,7 @@ struct ServerList: View {
         .accessibilityValue(Text(verbatim: "\(server.user)@\(server.address)"))
         .contextMenu {
             Button("Edit", systemImage: "pencil") { editing = server }
-            Button("Delete", systemImage: "trash", role: .destructive) { store.delete(server) }
+            Button("Delete", systemImage: "trash", role: .destructive) { deleting = server }
         }
     }
 
@@ -188,7 +196,7 @@ private struct LiveDot: View {
     let theme: Theme
 
     var body: some View {
-        Circle().fill(model.state.color(theme)).frame(width: 7, height: 7).accessibilityLabel("Connected")
+        Circle().fill(model.state.color(theme)).frame(width: 7, height: 7).accessibilityLabel(model.state.label)
     }
 }
 
@@ -258,7 +266,7 @@ struct KeyForm: View {
                 } header: {
                     saved ? Text("Replaces the saved key") : Text("Private key")
                 } footer: {
-                    Text("Paste an OpenSSH private key (ed25519 or RSA). On a Mac, `pbcopy < ~/.ssh/id_ed25519` copies yours. The key stays in this iPhone's Keychain; its public half goes in each server's `~/.ssh/authorized_keys`.")
+                    Text("Paste an OpenSSH ed25519 private key. On a Mac, `pbcopy < ~/.ssh/id_ed25519` copies yours. The key stays in this iPhone's Keychain; its public half goes in each server's `~/.ssh/authorized_keys`.")
                 }
                 if let error {
                     Text(error).foregroundStyle(.red)
@@ -282,7 +290,7 @@ struct KeyForm: View {
         do {
             _ = try Session.keyAuth(user: "", pem: key, passphrase: passphrase.isEmpty ? nil : passphrase)
         } catch {
-            return self.error = String(localized: "Couldn't read the key. Paste it in OpenSSH format (ed25519 or RSA) with its BEGIN and END lines, and its passphrase if it has one.")
+            return self.error = error.localizedDescription
         }
         guard Keychain.set("privateKey", key), Keychain.set("passphrase", passphrase) else {
             return self.error = String(localized: "Couldn't save to the Keychain.")

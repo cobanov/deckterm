@@ -255,6 +255,15 @@ struct TerminalScreen: View {
 }
 
 extension TerminalModel.State {
+    /// What the color says, for VoiceOver.
+    var label: LocalizedStringKey {
+        switch self {
+        case .connecting: "Connecting"
+        case .live: "Connected"
+        case .ended: "Disconnected"
+        }
+    }
+
     func color(_ theme: Theme) -> SwiftUI.Color {
         switch self {
         case .connecting: theme.ansiColor(11)
@@ -525,6 +534,7 @@ private struct SessionTab: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(verbatim: model.server.title))
+        .accessibilityValue(Text(model.state.label))
         .accessibilityAddTraits(active ? .isSelected : [])
         .contextMenu { Button("Disconnect", systemImage: "xmark", role: .destructive, action: close) }
     }
@@ -560,10 +570,10 @@ private struct SidePanel: View {
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)
-                icon("arrow.clockwise", "Reconnect") { model.connect() }
-                icon("xmark", "Disconnect", disconnect)
-                icon("gearshape", "Settings", settings)
-                icon("square.grid.2x2", "Back to list", back)
+                IconKey("arrow.clockwise", "Reconnect", theme: theme) { model.connect() }
+                IconKey("xmark", "Disconnect", theme: theme, action: disconnect)
+                IconKey("gearshape", "Settings", theme: theme, action: settings)
+                IconKey("square.grid.2x2", "Back to list", theme: theme, action: back)
             }
             Picker("Section", selection: $tab) {
                 Text("Snippets").tag(Tab.snippets)
@@ -626,17 +636,6 @@ private struct SidePanel: View {
                 .foregroundStyle(theme.fg.opacity(0.45))
                 .padding(.top, 4)
         }
-    }
-
-    private func icon(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 32, height: 30)
-                .background(theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
     private func add() {
