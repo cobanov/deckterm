@@ -113,7 +113,7 @@ struct ServerList: View {
 
     private var list: some View {
         page {
-            Mark(theme: theme, font: font, size: 28)
+            Mark(theme: theme, size: 28)
             Text(verbatim: "deckterm").font(font.font(18, bold: true))
             Spacer()
             headerButton("gearshape", "Settings") { settingsShown = true }

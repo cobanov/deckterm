@@ -14,7 +14,7 @@ struct WelcomeScreen: View {
         let layout = width == .compact && height == .regular ? AnyLayout(VStackLayout(spacing: 40)) : AnyLayout(HStackLayout(spacing: 0))
         layout {
             VStack(spacing: 14) {
-                Mark(theme: theme, font: font, size: 72)
+                Mark(theme: theme, size: 72)
                 Text(verbatim: "deckterm")
                     .font(font.font(34, bold: true))
                     .foregroundStyle(theme.fg)

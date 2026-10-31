@@ -137,19 +137,42 @@ enum TermFont: String, CaseIterable, Identifiable {
     }
 }
 
-/// The app icon's `>_`, drawn in the current theme.
+/// The app icon's hinge, drawn flat in the current theme: the lid in the accent, the base a step deeper.
 struct Mark: View {
     let theme: Theme
-    let font: TermFont
     let size: CGFloat
 
     var body: some View {
-        Text(verbatim: ">_")
-            .font(font.font(size * 0.4, bold: true))
-            .foregroundStyle(theme.accent)
-            .frame(width: size, height: size)
-            .background(theme.raised, in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
-            .accessibilityHidden(true)
+        ZStack {
+            Hinge(arm: 1).fill(theme.accent.opacity(0.6))
+            Hinge(arm: -1).fill(theme.accent)
+            Hinge(arm: nil).fill(theme.accent, style: FillStyle(eoFill: true))
+        }
+        .padding(size * 0.2)
+        .frame(width: size, height: size)
+        .background(theme.raised, in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+        .accessibilityHidden(true)
+    }
+}
+
+/// One part of the icon's mark, in the 256-unit grid of site/public/img/icon.svg: a `>` whose arms (30° each way,
+/// 40 wide) open on a pin at (183, 128). `arm` -1 is the lid, 1 the base, nil the pin with its hole.
+struct Hinge: Shape {
+    let arm: CGFloat?
+
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width, rect.height) / 192  // the mark's box is 32...224 on both axes
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.midX + (x - 128) * s, y: rect.midY + (y - 128) * s) }
+        var path = Path()
+        guard let arm else {
+            for r: CGFloat in [30, 10] { path.addEllipse(in: CGRect(origin: p(183 - r, 128 - r), size: CGSize(width: 2 * r * s, height: 2 * r * s))) }
+            return path
+        }
+        let ux = -cos(CGFloat.pi / 6), uy = arm * sin(CGFloat.pi / 6)
+        // From inside the pin's ring (18) out to the end (150), 20 either side of the arm's centre line.
+        path.addLines([(18, 20), (150, 20), (150, -20), (18, -20)].map { t, h in p(183 + t * ux - h * uy, 128 + t * uy + h * ux) })
+        path.closeSubpath()
+        return path
     }
 }
 

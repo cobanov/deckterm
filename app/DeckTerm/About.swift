@@ -19,7 +19,7 @@ struct AboutSheet: View {
             Form {
                 Section {
                     HStack(spacing: 14) {
-                        Mark(theme: theme, font: font, size: 52)
+                        Mark(theme: theme, size: 52)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(verbatim: "DeckTerm").font(font.font(18, bold: true))
                             Text("The SSH terminal for your cyberdeck").font(.footnote).foregroundStyle(.secondary)
