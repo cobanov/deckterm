@@ -83,6 +83,7 @@ struct Backup: Codable, Transferable {
     var font: String?
     var fontSize: Double?
     var snippets: String?
+    var barKeys: String?
 
     init(_ store: Store) {
         let defaults = UserDefaults.standard
@@ -92,6 +93,7 @@ struct Backup: Codable, Transferable {
         font = defaults.string(forKey: "font")
         fontSize = defaults.object(forKey: "fontSize") as? Double
         snippets = defaults.string(forKey: "snippets")
+        barKeys = defaults.string(forKey: "barKeys")
     }
 
     /// Adds devices or replaces them by id and takes the settings. A host key this phone already pinned wins.
@@ -101,7 +103,7 @@ struct Backup: Codable, Transferable {
         valid.forEach(store.save)
         Pins.all = Pins.all.merging(pins) { current, _ in current }
         let defaults = UserDefaults.standard
-        for (key, value) in [("theme", theme), ("font", font), ("snippets", snippets)] where value != nil {
+        for (key, value) in [("theme", theme), ("font", font), ("snippets", snippets), ("barKeys", barKeys)] where value != nil {
             defaults.set(value, forKey: key)
         }
         if let fontSize { defaults.set(min(max(fontSize, 8), 32), forKey: "fontSize") }

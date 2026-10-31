@@ -3,6 +3,8 @@ import StoreKit
 
 @main
 struct DeckTermApp: App {
+    @UIApplicationDelegateAdaptor private var delegate: AppDelegate
+
     init() {
         TermFont.register()
         // Tips that complete outside the tip jar (Ask to Buy, an interrupted purchase) arrive here; finished, they stop coming back.
@@ -19,7 +21,7 @@ struct DeckTermApp: App {
     }
 }
 
-/// The devices as cards, a grid for the landscape screen. ⌘1–9 opens one, ⌘N adds one.
+/// The devices as cards, in as many columns as the screen takes. ⌘1–9 opens one, ⌘N adds one.
 /// With no devices yet, the welcome screen stands in for it.
 struct ServerList: View {
     @StateObject private var store = Store()
@@ -31,6 +33,7 @@ struct ServerList: View {
     @State private var keyShown = false
     @State private var importing = false
     @State private var aboutShown = false
+    @State private var settingsShown = false
     @State private var notice: String?
 
     var body: some View {
@@ -45,6 +48,7 @@ struct ServerList: View {
         .sheet(item: $editing) { ServerForm(server: $0, store: store) }
         .sheet(isPresented: $keyShown) { KeyForm() }
         .sheet(isPresented: $aboutShown) { AboutSheet() }
+        .sheet(isPresented: $settingsShown) { SettingsScreen() }
         .fullScreenCover(isPresented: Binding(get: { sessions.active != nil }, set: { if !$0 { sessions.active = nil } })) {
             TerminalScreen(sessions: sessions, device: open)
         }
@@ -98,6 +102,7 @@ struct ServerList: View {
                     headerIcon("ellipsis")
                 }
                 .accessibilityLabel("More")
+                headerButton("gearshape", "Settings") { settingsShown = true }
                 headerButton("key", "SSH key") { keyShown = true }
                 headerButton("plus", "Add a device") { editing = Server() }
                     .keyboardShortcut(shortcut("n"))

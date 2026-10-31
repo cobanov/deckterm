@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// What shows while there are no devices, laid out for landscape: the mark on the left, the first steps on the right.
+/// What shows while there are no devices: the mark beside the first steps, or above them on an upright phone.
 /// Shown in its final state, with no entrance animation.
 struct WelcomeScreen: View {
     let addDevice: () -> Void
@@ -8,9 +8,12 @@ struct WelcomeScreen: View {
     let restore: () -> Void
     @AppStorage("theme") private var theme = Theme.classic
     @AppStorage("font") private var font = TermFont.jetBrains
+    @Environment(\.horizontalSizeClass) private var width
+    @Environment(\.verticalSizeClass) private var height
 
     var body: some View {
-        HStack(spacing: 0) {
+        let layout = width == .compact && height == .regular ? AnyLayout(VStackLayout(spacing: 40)) : AnyLayout(HStackLayout(spacing: 0))
+        layout {
             VStack(spacing: 14) {
                 Mark(theme: theme, font: font, size: 72)
                 Text(verbatim: "deckterm")

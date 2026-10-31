@@ -20,6 +20,8 @@ final class Session: @unchecked Sendable {
     private let events: AsyncStream<Event>
     private let input: AsyncStream<Event>.Continuation
     private var task: Task<Void, Never>?
+    /// The connection while the shell is open, for SFTP beside it. Set and read on the main thread.
+    private(set) var client: SSHClient?
 
     init() {
         (events, input) = AsyncStream.makeStream()
@@ -57,6 +59,7 @@ final class Session: @unchecked Sendable {
                 )
                 settings.group = group
                 let client = try await SSHClient.connect(to: settings)
+                await MainActor.run { self.client = client }
                 Task { if let system = await Self.system(of: client) { detected(system) } }
                 let pty = SSHChannelRequestEvent.PseudoTerminalRequest(
                     wantReply: true,
@@ -97,9 +100,11 @@ final class Session: @unchecked Sendable {
                     // The host closed the channel first; withPTY's own close after it is not news.
                 }
                 let live = client.isConnected
+                await MainActor.run { self.client = nil }
                 try? await client.close()
                 if !Task.isCancelled { ended(live ? nil : String(localized: "Connection lost.")) }
             } catch {
+                await MainActor.run { self.client = nil }
                 if !Task.isCancelled { ended(Self.describe(error, presented: validator.presented)) }
             }
             try? await group.shutdownGracefully()

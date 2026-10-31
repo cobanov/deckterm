@@ -1,5 +1,5 @@
 import SwiftUI
-import SwiftTerm
+import GhosttyTerminal
 import CoreText
 
 /// Terminal color schemes. The chosen one also colors the app around the terminal.
@@ -58,23 +58,24 @@ enum Theme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// SwiftTerm's own default palette, which the black themes keep.
+    /// SwiftTerm's default palette, which the black themes kept when the terminal moved to libghostty.
     private static let terminalApp: [UInt32] = [
         0x000000, 0xC23621, 0x25BC24, 0xADAD27, 0x492EE1, 0xD338D3, 0x33BBC8, 0xCBCCCD,
         0x818383, 0xFC391F, 0x31E722, 0xEAEC23, 0x5833FF, 0xF935F8, 0x14F0F0, 0xE9EBEB,
     ]
 
-    var background: UIColor { UIColor(hex[0]) }
-    var foreground: UIColor { UIColor(hex[1]) }
-    var cursor: UIColor { UIColor(hex[2]) }
-    var selection: UIColor { UIColor(hex[3]) }
-    var ansi: [SwiftTerm.Color] {
-        hex[5...].map { SwiftTerm.Color(red: UInt16($0 >> 16 & 0xFF) * 257, green: UInt16($0 >> 8 & 0xFF) * 257,
-                                        blue: UInt16($0 & 0xFF) * 257) }
+    /// The terminal's colors, as libghostty config lines.
+    func colors(_ config: inout TerminalConfiguration.Builder) {
+        let hex = hex.map { String(format: "#%06X", $0) }
+        config.withBackground(hex[0])
+        config.withForeground(hex[1])
+        config.withCursorColor(hex[2])
+        config.withSelectionBackground(hex[3])
+        for index in 0..<16 { config.withPalette(index, color: hex[5 + index]) }
     }
 
-    var bg: SwiftUI.Color { SwiftUI.Color(background) }
-    var fg: SwiftUI.Color { SwiftUI.Color(foreground) }
+    var bg: SwiftUI.Color { SwiftUI.Color(UIColor(hex[0])) }
+    var fg: SwiftUI.Color { SwiftUI.Color(UIColor(hex[1])) }
     var accent: SwiftUI.Color { SwiftUI.Color(UIColor(hex[4])) }
     func ansiColor(_ index: Int) -> SwiftUI.Color { SwiftUI.Color(UIColor(hex[5 + index])) }
     /// Panels and cards: the background a step toward the foreground.
@@ -124,6 +125,9 @@ enum TermFont: String, CaseIterable, Identifiable {
         return font
     }
 
+    /// The name libghostty's `font-family` finds it by; it picks the bold face itself.
+    var family: String { uiFont(13).familyName }
+
     func font(_ size: CGFloat, bold: Bool = false) -> SwiftUI.Font { SwiftUI.Font(uiFont(size, bold: bold) as CTFont) }
 
     /// Registers the bundled faces at launch, instead of a hand-kept Info.plist for UIAppFonts.
@@ -170,26 +174,31 @@ struct SystemMark: View {
 
 /// Which side of the landscape screen the camera is on. iOS insets both sides by its depth;
 /// the other side gives that room back and only keeps clear of the rounded corners.
+/// Nil when no side has it: an iPhone held upright, or an iPad.
 final class Housing: ObservableObject {
     static let shared = Housing()
-    @Published private(set) var onLeft = true
+    @Published private(set) var onLeft: Bool? = true
     private var watcher: NSKeyValueObservation?
 
     func watch(_ scene: UIWindowScene) {
         guard watcher == nil else { return }
         watcher = scene.observe(\.effectiveGeometry, options: [.initial, .new]) { [weak self] scene, _ in
+            let orientation = scene.effectiveGeometry.interfaceOrientation
             // Interface landscapeRight has the home side on the right, so the top of the phone on the left.
-            let onLeft = scene.effectiveGeometry.interfaceOrientation != .landscapeLeft
+            let onLeft = scene.traitCollection.userInterfaceIdiom == .phone && orientation.isLandscape
+                ? orientation != .landscapeLeft : nil
             DispatchQueue.main.async { if self?.onLeft != onLeft { self?.onLeft = onLeft } }
         }
     }
 }
 
 extension View {
-    /// The system inset on the camera's side, only `corner` on the other.
-    func clearsHousing(_ onLeft: Bool, corner: CGFloat = 20) -> some View {
-        padding(onLeft ? .trailing : .leading, corner)
-            .ignoresSafeArea(.container, edges: onLeft ? .trailing : .leading)
+    /// The system inset on the camera's side. On the other, `corner` and `top` together keep the top corner clear of
+    /// the screen's rounding: sized for the largest, 62 pt on a Pro Max, where (62 - 26)² + (62 - 12)² < 62².
+    /// One view either way, so turning the phone keeps what's on screen.
+    func clearsHousing(_ onLeft: Bool?, corner: CGFloat = 26, top: CGFloat = 12) -> some View {
+        let side: Edge.Set = onLeft == true ? .trailing : onLeft == false ? .leading : []
+        return padding(side, corner).padding(.top, onLeft == nil ? 0 : top).ignoresSafeArea(.container, edges: side)
     }
 }
 

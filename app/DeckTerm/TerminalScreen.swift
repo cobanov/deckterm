@@ -1,8 +1,8 @@
 import SwiftUI
-import SwiftTerm
+import GhosttyTerminal
 
 /// Full-screen terminal with a thin key bar under it. Swipe in from the left edge to go back,
-/// from the right edge for the panel (snippets, look). The deck's Bluetooth keyboard types; the on-screen one
+/// from the right edge for the panel (snippets, files). The deck's Bluetooth keyboard types; the on-screen one
 /// shows only from the bar's key. Hold a finger on the terminal and slide it for arrow keys.
 /// Going back keeps the session open: the bar's tabs, the list and ⌘1–9 switch between them.
 struct TerminalScreen: View {
@@ -16,6 +16,8 @@ struct TerminalScreen: View {
     @AppStorage("tutorialSeen") private var tutorialSeen = false
     @State private var panelShown = false
     @State private var panelDrag: CGFloat = 0
+    @State private var settingsShown = false
+    @State private var filesShown = false
 
     var body: some View {
         if let model = sessions.shown { screen(model) }
@@ -31,11 +33,12 @@ struct TerminalScreen: View {
                     .init(input: "w", title: "Back to list") { back() },
                 ] + (1...9).map { n in .init(input: "\(n)", title: "Device \(n)") { device(n - 1) } })
                 .clearsHousing(housing.onLeft)
-                // Edge to edge on both sides: the camera never reaches down to the bar, only the rounded corners do.
+                .padding(.horizontal, housing.onLeft == nil ? 6 : 0)  // upright or on an iPad: off the glass's edge
+                // Edge to edge: the camera never reaches down to the bar. Above the home indicator, the rounded
+                // corners are clear of it too.
                 KeyBar(model: model, sessions: sessions, theme: theme, font: font, panel: { showPanel(true) })
                     .ignoresSafeArea(.container, edges: .horizontal)
             }
-            .ignoresSafeArea(.container, edges: .bottom)  // not .keyboard: the bar rides on the on-screen keyboard
 
             // Swipe zones at the very edges, narrower than the gap the terminal leaves there.
             HStack {
@@ -52,8 +55,10 @@ struct TerminalScreen: View {
                 .accessibilityLabel("Close panel")
                 .accessibilityHidden(!panelShown)
             // Always mounted and slid by offset, so opening, dragging and closing are one motion.
-            SidePanel(model: model, housingOnLeft: housing.onLeft, fontSize: $fontSize, font: $font, theme: $theme,
-                      back: back, disconnect: { sessions.close(model) }, hide: { showPanel(false) })
+            SidePanel(model: model, font: font, theme: theme,
+                      back: back, disconnect: { sessions.close(model) }, hide: { showPanel(false) },
+                      settings: { settingsShown = true },
+                      expandFiles: { showPanel(false); filesShown = true })
                 .offset(x: panelShown ? max(panelDrag, 0) : 460)
                 .allowsHitTesting(panelShown)
                 .accessibilityHidden(!panelShown)
@@ -73,6 +78,10 @@ struct TerminalScreen: View {
             }
         }
         .background(theme.bg.ignoresSafeArea())
+        .sheet(isPresented: $settingsShown, onDismiss: focus) { SettingsScreen() }
+        .fullScreenCover(isPresented: $filesShown, onDismiss: focus) {
+            FilesScreen(model: model, theme: theme, font: font) { filesShown = false }
+        }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
@@ -86,8 +95,10 @@ struct TerminalScreen: View {
 
     private func showPanel(_ shown: Bool) {
         withAnimation(.snappy) { panelShown = shown }
-        if !shown { _ = sessions.shown?.terminal.becomeFirstResponder() }  // the snippet field may have taken the keyboard
+        if !shown { focus() }  // the snippet field may have taken the keyboard
     }
+
+    private func focus() { _ = sessions.shown?.terminal.becomeFirstResponder() }
 
     private func edge(_ swiped: @escaping (CGFloat) -> Void) -> some View {
         SwiftUI.Color.clear
@@ -139,32 +150,40 @@ struct TerminalScreen: View {
 }
 
 /// One connection, and the bridge between its terminal view and the SSH session.
-final class TerminalModel: ObservableObject, TerminalViewDelegate {
+@MainActor final class TerminalModel: ObservableObject, TerminalSurfaceOpenURLDelegate {
     enum State: Equatable {
         case connecting, live, ended(String)
     }
+
+    /// One for every session, so a change of look reaches them all. No theme: libghostty-spm's would override ours.
+    private static let controller = TerminalController(configuration: .default, theme: TerminalTheme())
 
     @Published var server: Server
     @Published private(set) var state = State.connecting
     /// Off by default: the deck's Bluetooth keyboard types.
     @Published private(set) var keyboardShown = false
     /// Owned here, not by the screen, so the scrollback survives switching away.
-    let box = TerminalBox()
-    var terminal: TerminalView { box.terminal }
+    let terminal = DeckTerminal(frame: .zero)
     var close: () -> Void = {}
     var detected: (String) -> Void = { _ in }
+    /// SFTP on the shell's own connection.
+    private(set) lazy var files = RemoteFiles { [weak self] in self?.session?.client }
     private let pad = ArrowPad()
     private var session: Session?
     private var size = (cols: 80, rows: 24)
-    private var font: TermFont?
-    private var fontSize = 0.0
-    private var theme: Theme?
+    /// libghostty's end of the shell: the host's bytes go in, keys and grid sizes come out. No local PTY on iOS.
+    private lazy var io = InMemoryTerminalSession(
+        write: { [weak self] data in DispatchQueue.main.async { self?.send(Array(data)) } },
+        resize: { [weak self] grid in
+            DispatchQueue.main.async { self?.resized(cols: Int(grid.columns), rows: Int(grid.rows)) }
+        })
 
     init(server: Server) {
         self.server = server
-        terminal.terminalDelegate = self
-        terminal.inputAccessoryView = nil  // SwiftTerm's own key bar; ours is KeyBar
-        terminal.inputView = UIView()      // an empty keyboard, so a tap never raises the on-screen one
+        terminal.controller = Self.controller
+        terminal.configuration = TerminalSurfaceOptions(backend: .inMemory(io))
+        terminal.delegate = self
+        terminal.inputAccessoryItems = []  // libghostty's own key bar; ours is KeyBar
         pad.attach(to: terminal)
         connect()
     }
@@ -173,7 +192,7 @@ final class TerminalModel: ObservableObject, TerminalViewDelegate {
 
     func connect() {
         session?.close()
-        terminal.feed(text: "Connecting to \(server.user)@\(server.address)…\r\n")
+        io.receive("Connecting to \(server.user)@\(server.address)…\r\n")
         state = .connecting
         let session = Session()
         self.session = session
@@ -189,63 +208,50 @@ final class TerminalModel: ObservableObject, TerminalViewDelegate {
         session = nil
     }
 
-    /// The look, applied only when it changed: installing colors redraws the whole screen.
-    func apply(font: TermFont, size: Double, theme: Theme) {
-        if self.font != font || fontSize != size {
-            (self.font, fontSize) = (font, size)
-            let normal = font.uiFont(size), bold = font.uiFont(size, bold: true)
-            terminal.setFonts(normal: normal, bold: bold, italic: normal.italic, boldItalic: bold.italic)
-        }
-        if self.theme != theme {
-            self.theme = theme
-            terminal.installColors(theme.ansi)
-            terminal.nativeForegroundColor = theme.foreground
-            terminal.nativeBackgroundColor = theme.background  // only the background setter redraws
-            terminal.caretColor = theme.cursor
-            terminal.selectedTextBackgroundColor = theme.selection
-        }
+    /// The look of every session. libghostty reconfigures only when it changed.
+    static func apply(font: TermFont, size: Double, theme: Theme) {
+        controller.setTerminalConfiguration(TerminalConfiguration { config in
+            config.withFontFamily(font.family)
+            config.withFontSize(Float(size))
+            theme.colors(&config)
+        })
     }
 
     func toggleKeyboard() {
         keyboardShown.toggle()
-        terminal.inputView = keyboardShown ? nil : UIView()  // nil is the system keyboard, an empty view none
+        terminal.keyboardShown = keyboardShown
         _ = terminal.becomeFirstResponder()
-        terminal.reloadInputViews()
     }
 
     private func received(_ bytes: ArraySlice<UInt8>) {
         if state == .connecting { state = .live }
-        terminal.feed(byteArray: bytes)
+        io.receive(Data(bytes))
     }
 
     private func ended(_ message: String?) {
         guard let message else { return close() }
         state = .ended(message)
-        terminal.feed(text: "\r\n\u{1b}[33m\(message)\u{1b}[0m\r\nEnter: reconnect · Esc: close\r\n")
+        io.receive("\r\n\u{1b}[33m\(message)\u{1b}[0m\r\nEnter: reconnect · Esc: close\r\n")
     }
 
-    func send(source: TerminalView, data: ArraySlice<UInt8>) {
-        guard case .ended = state else { return session?.send(data) ?? () }
-        switch Array(data) {
+    /// The terminal's keys, encoded by libghostty.
+    private func send(_ bytes: [UInt8]) {
+        guard case .ended = state else { return session?.send(bytes[...]) ?? () }
+        switch bytes {
         case [13]: connect()
         case [27]: close()
         default: break
         }
     }
 
-    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-        size = (newCols, newRows)
-        session?.resize(cols: newCols, rows: newRows)
+    private func resized(cols: Int, rows: Int) {
+        size = (cols, rows)
+        session?.resize(cols: cols, rows: rows)
     }
 
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        if let url = URL(string: link) { UIApplication.shared.open(url) }
+    func terminalDidRequestOpenURL(_ url: String, kind: TerminalOpenURLKind) {
+        if let url = URL(string: url) { UIApplication.shared.open(url) }
     }
-
-    func setTerminalTitle(source: TerminalView, title: String) {}
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func scrolled(source: TerminalView, position: Double) {}
-    func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
 
 extension TerminalModel.State {
@@ -258,37 +264,61 @@ extension TerminalModel.State {
     }
 }
 
-/// The terminal, wrapped to carry the app's ⌘ commands. Not on the terminal itself: SwiftTerm's canPerformAction
-/// refuses every action but its menu's and can't be overridden. UIKit asks this view next, up from the terminal.
-final class TerminalBox: UIView {
+/// libghostty's terminal view with the app's ⌘ commands, and the on-screen keyboard only on request.
+final class DeckTerminal: UITerminalView {
     struct Command {
         let input: String
         let title: String
         let action: () -> Void
     }
 
-    let terminal = TerminalView(frame: .zero)
     var commands: [Command] = []
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        terminal.frame = bounds
-        terminal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        addSubview(terminal)
+    var keyboardShown = false {
+        didSet { reloadInputViews() }
     }
+    private let noKeyboard = UIView()
 
-    required init?(coder: NSCoder) { nil }
+    /// An empty keyboard while hidden, so focus never raises the on-screen one; nil is the system keyboard.
+    override var inputView: UIView? { keyboardShown ? nil : noKeyboard }
+
+    /// A tap still clicks, but only focuses: the keyboard follows the bar's key, and resigning would cut off the
+    /// Bluetooth keyboard too.
+    override func toggleSoftwareKeyboard() { _ = becomeFirstResponder() }
 
     override var keyCommands: [UIKeyCommand]? {
-        commands.map {
-            let command = UIKeyCommand(title: $0.title, action: #selector(run), input: $0.input, modifierFlags: .command)
+        (super.keyCommands ?? []) + commands.map {
+            let command = UIKeyCommand(title: $0.title, action: #selector(runCommand), input: $0.input, modifierFlags: .command)
             command.wantsPriorityOverSystemBehavior = true  // ⌘W and ⌘, are the system's Close and Settings otherwise
             return command
         }
     }
 
-    @objc private func run(_ command: UIKeyCommand) {
-        commands.first { $0.input == command.input }?.action()
+    /// libghostty sends every press to the terminal, where ⌘= zoomed it instead of changing the app's size; the
+    /// app's chords stop here.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // One set can hold ⌘ and the letter together.
+        let chords = presses.filter { press in
+            guard let key = press.key,
+                  key.modifierFlags.intersection([.command, .control, .alternate, .shift]) == .command else { return false }
+            return run(key.charactersIgnoringModifiers)
+        }
+        super.pressesBegan(presses.subtracting(chords), with: event)
+    }
+
+    @objc private func runCommand(_ command: UIKeyCommand) {
+        _ = run(command.input ?? "")
+    }
+
+    /// The chord arrives as a key command, to pressesBegan, or both: the first runs it, for this runloop turn.
+    private var claimed: String?
+    private func run(_ input: String) -> Bool {
+        guard let command = commands.first(where: { $0.input == input }) else { return false }
+        if claimed != input {
+            claimed = input
+            DispatchQueue.main.async { [weak self] in self?.claimed = nil }
+            command.action()
+        }
+        return true
     }
 }
 
@@ -298,24 +328,24 @@ private struct TerminalHost: UIViewRepresentable {
     let fontSize: Double
     let font: TermFont
     let theme: Theme
-    let commands: [TerminalBox.Command]
+    let commands: [DeckTerminal.Command]
 
     func makeUIView(context: Context) -> UIView { UIView() }
 
     func updateUIView(_ host: UIView, context: Context) {
-        let box = model.box
-        box.commands = commands
-        model.apply(font: font, size: fontSize, theme: theme)
-        guard box.superview !== host else { return }
-        host.subviews.forEach { $0.removeFromSuperview() }
-        box.frame = host.bounds
-        box.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        host.addSubview(box)
+        let terminal = model.terminal
+        terminal.commands = commands
+        TerminalModel.apply(font: font, size: fontSize, theme: theme)
+        // After SwiftUI's update, not inside it: the terminal taken off hands the keyboard focus to SwiftUI's own
+        // view, which then read the graph mid-update, locked up in a cycle and was killed switching tabs. Every
+        // call queues, so the last session picked is the one left showing.
         DispatchQueue.main.async {
-            _ = box.terminal.becomeFirstResponder()
-            // Back in a window, SwiftTerm repaints only the rows that changed since, often none, so the screen stayed
-            // blank. Setting a color is its public way to repaint every row.
-            box.terminal.nativeBackgroundColor = box.terminal.nativeBackgroundColor
+            guard terminal.superview !== host else { return }
+            host.subviews.forEach { $0.removeFromSuperview() }
+            terminal.frame = host.bounds
+            terminal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            host.addSubview(terminal)
+            _ = terminal.becomeFirstResponder()
         }
     }
 }
@@ -324,11 +354,11 @@ private struct TerminalHost: UIViewRepresentable {
 final class ArrowPad: NSObject, UIGestureRecognizerDelegate {
     enum Arrow { case left, right, up, down }
 
-    private weak var view: TerminalView?
+    private weak var view: UITerminalView?
     private var anchor = CGPoint.zero
     private let tick = UISelectionFeedbackGenerator()
 
-    func attach(to view: TerminalView) {
+    func attach(to view: UITerminalView) {
         self.view = view
         let hold = UILongPressGestureRecognizer(target: self, action: #selector(held))
         hold.minimumPressDuration = 0.3
@@ -345,14 +375,16 @@ final class ArrowPad: NSObject, UIGestureRecognizerDelegate {
             tick.selectionChanged()
         case .changed, .ended:  // a quick flick can arrive only with the lift
             let arrows = Self.arrows(from: &anchor, to: point)
-            // A finger held still first also opened SwiftTerm's copy and paste menu (a UIMenuController); sliding means arrows.
-            if !arrows.isEmpty { UIMenuController.shared.hideMenu() }
+            // A finger held still first also opened libghostty's edit menu; sliding means arrows.
+            if !arrows.isEmpty {
+                view?.interactions.compactMap { $0 as? UIEditMenuInteraction }.forEach { $0.dismissMenu() }
+            }
             for arrow in arrows {
                 switch arrow {
-                case .left: view?.sendKeyLeft()
-                case .right: view?.sendKeyRight()
-                case .up: view?.sendKeyUp()
-                case .down: view?.sendKeyDown()
+                case .left: view?.sendKey(.arrowLeft)
+                case .right: view?.sendKey(.arrowRight)
+                case .up: view?.sendKey(.arrowUp)
+                case .down: view?.sendKey(.arrowDown)
                 }
                 tick.selectionChanged()
             }
@@ -377,73 +409,86 @@ final class ArrowPad: NSObject, UIGestureRecognizerDelegate {
         }
     }
 
-    /// Alongside SwiftTerm's own long press, whose copy and paste menu still opens when the finger stays put.
+    /// Alongside libghostty's own long press, whose edit menu still opens when the finger stays put.
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         other is UILongPressGestureRecognizer
     }
 }
 
-private extension UIFont {
-    var italic: UIFont {
-        fontDescriptor.withSymbolicTraits(fontDescriptor.symbolicTraits.union(.traitItalic))
-            .map { UIFont(descriptor: $0, size: 0) } ?? self
-    }
-}
-
-/// The thin strip under the terminal: a tab per open session, and the keys a small keyboard lacks.
+/// The thin strip under the terminal: a tab per open session, and the keys a small keyboard lacks, as Settings
+/// lists them.
 private struct KeyBar: View {
     @ObservedObject var model: TerminalModel
     @ObservedObject var sessions: Sessions
     let theme: Theme
     let font: TermFont
     let panel: () -> Void
+    @AppStorage("barKeys") private var barKeys = BarKey.store(BarKey.standard)
 
     var body: some View {
-        HStack(spacing: 3) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 3) {
-                    ForEach(sessions.open, id: \.server.id) { tab in
-                        SessionTab(model: tab, active: tab === model, theme: theme, font: font,
-                                   select: { sessions.active = tab }, close: { sessions.close(tab) })
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
+        // One row when the keys fit beside a little room for the tabs. Narrower (a phone held upright, a slim iPad
+        // window), the keys get rows of their own under the tabs, so none hides off screen.
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: 3) {
-                if case .ended = model.state {
-                    key("connect", "Reconnect") { model.connect() }
-                }
-                key("esc", "Escape") { model.terminal.send([0x1b]) }
-                key("tab", "Tab") { model.terminal.send([0x09]) }
-                key("^C", "Control C") { model.terminal.send([0x03]) }
-                key("^D", "Control D") { model.terminal.send([0x04]) }
-                key("^Z", "Control Z") { model.terminal.send([0x1a]) }
-                key("|", "Pipe") { model.terminal.send(txt: "|") }
-                key("~", "Tilde") { model.terminal.send(txt: "~") }
-                key("←", "Left") { model.terminal.sendKeyLeft() }
-                key("↓", "Down") { model.terminal.sendKeyDown() }
-                key("↑", "Up") { model.terminal.sendKeyUp() }
-                key("→", "Right") { model.terminal.sendKeyRight() }
-                icon(model.keyboardShown ? "keyboard.chevron.compact.down" : "keyboard",
-                     model.keyboardShown ? "Hide keyboard" : "Show keyboard", model.toggleKeyboard)
-                icon("sidebar.right", "Panel", panel)
+                tabs.frame(minWidth: 80, idealWidth: 80, maxWidth: .infinity, alignment: .leading)
+                keys(fill: false)
+                icons
             }
-            .fixedSize()
+            .frame(height: 30)
+            VStack(spacing: 3) {
+                HStack(spacing: 3) {
+                    tabs.frame(maxWidth: .infinity, alignment: .leading)
+                    icons
+                }
+                .frame(height: 30)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 46), spacing: 3)], spacing: 3) { keys(fill: true) }
+                    .padding(.bottom, 4)
+            }
         }
         .font(font.font(12))
         .foregroundStyle(theme.fg)
         .padding(.horizontal, 26)
-        .frame(height: 30)
         .background(theme.surface.ignoresSafeArea())
         .overlay(alignment: .top) { Rectangle().fill(theme.fg.opacity(0.08)).frame(height: 1).ignoresSafeArea() }
     }
 
-    private func key(_ title: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
+    private var tabs: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 3) {
+                ForEach(sessions.open, id: \.server.id) { tab in
+                    SessionTab(model: tab, active: tab === model, theme: theme, font: font,
+                               select: { sessions.active = tab }, close: { sessions.close(tab) })
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    @ViewBuilder private func keys(fill: Bool) -> some View {
+        if case .ended = model.state {
+            key("connect", "Reconnect", fill: fill) { model.connect() }
+        }
+        ForEach(BarKey.list(barKeys)) { bar in
+            key(bar.title, bar.label, fill: fill) { bar.press(on: model.terminal) }
+        }
+    }
+
+    @ViewBuilder private var icons: some View {
+        icon(model.keyboardShown ? "keyboard.chevron.compact.down" : "keyboard",
+             model.keyboardShown ? "Hide keyboard" : "Show keyboard", model.toggleKeyboard)
+        icon("sidebar.right", "Panel", panel)
+    }
+
+    /// `fill`: as wide as its grid cell.
+    private func key(_ title: String, _ label: LocalizedStringKey, fill: Bool,
+                     _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(verbatim: title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .padding(.horizontal, 7)
-                .frame(minWidth: 30, minHeight: 24)
+                .frame(minWidth: 30, maxWidth: fill ? .infinity : nil, minHeight: fill ? 30 : 24)
                 .background(theme.raised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -485,18 +530,18 @@ private struct SessionTab: View {
     }
 }
 
-/// The right-hand panel: the connection, snippets, and the look.
+/// The right-hand panel: the connection, snippets, and the host's files. The look is in Settings.
 private struct SidePanel: View {
-    enum Tab: String { case snippets, look }
+    enum Tab: String { case snippets, files }
 
     @ObservedObject var model: TerminalModel
-    let housingOnLeft: Bool
-    @Binding var fontSize: Double
-    @Binding var font: TermFont
-    @Binding var theme: Theme
+    let font: TermFont
+    let theme: Theme
     let back: () -> Void
     let disconnect: () -> Void
     let hide: () -> Void
+    let settings: () -> Void
+    let expandFiles: () -> Void
     @AppStorage("panelTab") private var tab = Tab.snippets
     /// One command per line. shortcut: no multi-line snippets; store a list if a script snippet is ever wanted.
     @AppStorage("snippets") private var snippets = ""
@@ -517,34 +562,31 @@ private struct SidePanel: View {
                 Spacer(minLength: 4)
                 icon("arrow.clockwise", "Reconnect") { model.connect() }
                 icon("xmark", "Disconnect", disconnect)
+                icon("gearshape", "Settings", settings)
                 icon("square.grid.2x2", "Back to list", back)
             }
             Picker("Section", selection: $tab) {
                 Text("Snippets").tag(Tab.snippets)
-                Text("Look").tag(Tab.look)
+                Text("Files").tag(Tab.files)
             }
             .pickerStyle(.segmented)
-            ScrollView {
-                switch tab {
-                case .snippets: snippetList
-                case .look: look
-                }
+            switch tab {
+            case .snippets: ScrollView { snippetList }.scrollIndicators(.hidden)
+            case .files:
+                FilesView(files: model.files, live: model.state == .live, theme: theme, font: font,
+                          corner: ("arrow.up.left.and.arrow.down.right", "Full screen", expandFiles))
             }
-            .scrollIndicators(.hidden)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(width: 330)
         .frame(maxHeight: .infinity)
-        .padding(.trailing, housingOnLeft ? 6 : 0)
         .foregroundStyle(theme.fg)
-        // The background reaches the screen edge; the content keeps clear of the rounded corners and the camera.
+        // The background reaches the screen edge; the content stays in the safe area, clear of the rounded corners
+        // and the camera.
         .background(theme.surface.ignoresSafeArea())
         .overlay(alignment: .leading) { Rectangle().fill(theme.fg.opacity(0.1)).frame(width: 1).ignoresSafeArea() }
-        // Pinned to the screen's edge when the camera is on the other side. Ignoring the safe area on the panel
-        // itself would widen it and leave the gap on its left instead.
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .ignoresSafeArea(.container, edges: housingOnLeft ? .trailing : [])
     }
 
     private var lines: [String] { snippets.split(separator: "\n").map(String.init) }
@@ -586,65 +628,6 @@ private struct SidePanel: View {
         }
     }
 
-    private var look: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            caption("Font")
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
-                ForEach(TermFont.allCases) { face in
-                    Button { font = face } label: {
-                        Text(verbatim: face.name)
-                            .font(face.font(12))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 32)
-                            .background(theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay(selection(face == font))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(face == font ? .isSelected : [])
-                }
-            }
-            Stepper(value: $fontSize, in: 8...32) {
-                Text("Size \(Int(fontSize)) pt").font(font.font(12))
-            }
-            caption("Theme")
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
-                ForEach(Theme.allCases) { scheme in
-                    Button { theme = scheme } label: { swatch(scheme) }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text(verbatim: scheme.name))
-                        .accessibilityAddTraits(scheme == theme ? .isSelected : [])
-                }
-            }
-            Text("Hold and slide: arrow keys\nSwipe from the left: the list · from the right: this panel\n⌘W back · ⌘1–9 devices · ⌘= ⌘- text size · ⌘, panel")
-                .font(font.font(10))
-                .foregroundStyle(theme.fg.opacity(0.45))
-                .padding(.top, 4)
-        }
-    }
-
-    private func swatch(_ scheme: Theme) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(verbatim: scheme.name).font(font.font(11, bold: true)).foregroundStyle(scheme.fg).lineLimit(1)
-            HStack(spacing: 3) {
-                ForEach(1..<7) { Circle().fill(scheme.ansiColor($0)).frame(width: 8, height: 8) }
-            }
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(scheme.bg, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.fg.opacity(0.12)))
-        .overlay(selection(scheme == theme))
-    }
-
-    private func selection(_ selected: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .strokeBorder(selected ? theme.accent : .clear, lineWidth: 2)
-    }
-
-    private func caption(_ text: LocalizedStringKey) -> some View {
-        Text(text).textCase(.uppercase).font(font.font(10, bold: true)).foregroundStyle(theme.fg.opacity(0.45))
-    }
-
     private func icon(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
@@ -670,7 +653,8 @@ private struct SidePanel: View {
     }
 
     private func send(_ command: String, run: Bool) {
-        model.terminal.send(txt: run ? command + "\r" : command)
+        model.terminal.insertText(command)
+        if run { model.terminal.sendKey(.enter) }
         hide()
     }
 }
@@ -691,11 +675,11 @@ private struct Tutorial: View {
                     Spacer()
                     hint("arrow.up.and.down.and.arrow.left.and.right", "Hold and slide on the terminal", "Arrow keys", leading: nil)
                     Spacer()
-                    hint("arrow.left", "Swipe in from the right edge", "Settings and snippets", leading: false)
+                    hint("arrow.left", "Swipe in from the right edge", "Snippets and files", leading: false)
                 }
                 .padding(.horizontal, 24)
                 Spacer()
-                Text("⌘W back · ⌘1–9 devices · ⌘, settings")
+                Text("⌘W back · ⌘1–9 devices · ⌘, panel")
                     .font(font.font(12))
                     .foregroundStyle(theme.fg.opacity(0.55))
                 Button("Got it", action: done)

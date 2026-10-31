@@ -5,9 +5,10 @@ options:
   deploymentTarget:
     iOS: "17.0"
 packages:
-  SwiftTerm:
-    url: https://github.com/migueldeicaza/SwiftTerm
-    exactVersion: 1.99.1
+  # libghostty, Ghostty's terminal core, as a prebuilt XCFramework with a UIKit view.
+  libghostty-spm:
+    url: https://github.com/Lakr233/libghostty-spm
+    exactVersion: 2.2.2026103001
   # The same version herdrchat ships, so both apps run on one tested SSH stack.
   Citadel:
     url: https://github.com/orlandos-nl/Citadel
@@ -17,7 +18,8 @@ settings:
     DEVELOPMENT_TEAM: 6U58AKY6F8
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0"
+    # 1.0 is the App Store's; TestFlight builds count 1, 2, 3 within a version (scripts/next_build.py).
+    MARKETING_VERSION: "1.2"
     CURRENT_PROJECT_VERSION: "1"
 targets:
   DeckTerm:
@@ -25,7 +27,8 @@ targets:
     platform: iOS
     sources: [DeckTerm]
     dependencies:
-      - package: SwiftTerm
+      - package: libghostty-spm
+        product: GhosttyTerminal
       - package: Citadel
     settings:
       base:
@@ -35,13 +38,14 @@ targets:
         CODE_SIGN_STYLE: $(DECKTERM_SIGN_STYLE:default=Automatic)
         CODE_SIGN_IDENTITY: $(DECKTERM_SIGN_IDENTITY:default=Apple Development)
         PROVISIONING_PROFILE_SPECIFIER: $(DECKTERM_PROFILE)
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: DeckTerm
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        # Landscape only: the phone lies sideways in the lid, and this holds even with rotation lock on.
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        # The iPhone opens in landscape, held as the deck holds it; when Settings lets it turn, AppDelegate adds portrait.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: DeckTerm connects to SSH servers on your local network.
         # Only standard SSH crypto, as herdrchat declares for the same stack.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO

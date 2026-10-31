@@ -6,7 +6,7 @@
 #
 # Signs from the shared signing keychain (its password is on disk), so it works from a terminal that can't unlock
 # the login keychain (codesign: errSecInternalComponent). Same pattern as ayikla/scripts/testflight.sh.
-# The build number is the time, so every upload is new.
+# A TestFlight build is numbered 1, 2, 3… within its version, one past what App Store Connect has (next_build.py).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -15,12 +15,16 @@ ISSUER=93179d25-e1b9-4256-941e-27126dcc7ea6
 DEVICE=00008101-001E24522190001E   # iPhone 12 mini in the deck, registered on the team
 SIGNING_CERT=2632468CDF18C5FAFC4A6C2CC26EC610EAE84922   # SHA-1: the display name isn't unique on this team
 KEYCHAIN="$HOME/Library/Keychains/cobanov-signing.keychain-db"
-BUILD_NUMBER=${BUILD_NUMBER:-$(date +%y%m%d%H%M)}
 case ${1:-} in
   install) PROFILE="DeckTerm Ad Hoc"; METHOD=release-testing ;;
   testflight) PROFILE="DeckTerm App Store"; METHOD=app-store-connect ;;
   *) echo "usage: scripts/release.sh install|testflight" >&2; exit 2 ;;
 esac
+VERSION=$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"$/\1/p' project.yml)
+if [[ $1 == testflight ]]; then
+  BUILD_NUMBER=${BUILD_NUMBER:-$(scripts/next_build.py "$KEY_ID" "$ISSUER" dev.cobanov.deckterm "$VERSION")}
+fi
+BUILD_NUMBER=${BUILD_NUMBER:-$(date +%y%m%d%H%M)}  # an Ad Hoc install is never uploaded, so any fresh number does
 ARCHIVE=build/release/DeckTerm.xcarchive
 EXPORT=build/release/$1
 
@@ -34,9 +38,8 @@ security list-keychains -d user -s "$KEYCHAIN" $ORIGINAL
 
 xcodegen generate --quiet
 rm -rf "$ARCHIVE" "$EXPORT"
-# SwiftTerm runs a build-tool plugin; Xcode asks to trust it once, the command line needs the skip flag.
 xcodebuild archive -project DeckTerm.xcodeproj -scheme DeckTerm -configuration Release \
-  -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" -skipPackagePluginValidation -skipMacroValidation \
+  -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" DECKTERM_SIGN_STYLE=Manual DECKTERM_SIGN_IDENTITY="$SIGNING_CERT" \
   DECKTERM_PROFILE="$PROFILE" OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
   COMPILER_INDEX_STORE_ENABLE=NO -quiet
@@ -59,7 +62,7 @@ EOF
 PATH="/usr/bin:$PATH" xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$EXPORT/ExportOptions.plist" -quiet
 IPA="$EXPORT/DeckTerm.ipa"
-echo "built $IPA, build $BUILD_NUMBER ($(du -h "$IPA" | cut -f1))"
+echo "built $IPA, $VERSION ($BUILD_NUMBER), $(du -h "$IPA" | cut -f1)"
 
 if [[ $1 == install ]]; then
   # installation_proxy (brew install ideviceinstaller): an Ad Hoc build needs no Developer Mode, devicectl does.

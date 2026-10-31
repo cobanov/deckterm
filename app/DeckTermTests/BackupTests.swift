@@ -4,7 +4,7 @@ import XCTest
 /// A backup carried to a phone that already has a pin of its own. Runs in the app's own UserDefaults, next to its
 /// real devices, so it uses addresses of its own and puts every key back.
 final class BackupTests: XCTestCase {
-    private let keys = ["servers", "servers.unreadable", "pins", "theme", "font", "fontSize", "snippets"]
+    private let keys = ["servers", "servers.unreadable", "pins", "theme", "font", "fontSize", "snippets", "barKeys"]
     private var saved: [String: Any] = [:]
 
     override func setUp() {
@@ -24,6 +24,7 @@ final class BackupTests: XCTestCase {
         defaults.set("nord", forKey: "theme")
         defaults.set(40.0, forKey: "fontSize")
         defaults.set("htop\ndf -h", forKey: "snippets")
+        defaults.set("enter,esc", forKey: "barKeys")
         var backup = try JSONDecoder().decode(Backup.self, from: JSONEncoder().encode(Backup(store)))
         backup.servers.append(Server(name: "broken", address: "", user: "me"))
         backup.servers.append(Server(name: "padded", address: " 10.9.9.3 ", user: "me "))
@@ -35,6 +36,7 @@ final class BackupTests: XCTestCase {
         defaults.set("classic", forKey: "theme")
         defaults.set(13.0, forKey: "fontSize")
         defaults.set("", forKey: "snippets")
+        defaults.removeObject(forKey: "barKeys")
         let other = Store()
         XCTAssertEqual(backup.restore(into: other), backup.servers.count - 1, "all but the broken one")
         XCTAssertTrue(other.servers.contains { $0.id == nuc.id })
@@ -45,6 +47,13 @@ final class BackupTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "theme"), "nord")
         XCTAssertEqual(defaults.double(forKey: "fontSize"), 32)
         XCTAssertEqual(defaults.string(forKey: "snippets"), "htop\ndf -h")
+        XCTAssertEqual(BarKey.list(defaults.string(forKey: "barKeys") ?? ""), [.enter, .esc])
+    }
+
+    /// A key a later version drops, or a hand-edited list, leaves the rest of the bar standing.
+    func testBarKeysSkipUnknownOnes() {
+        XCTAssertEqual(BarKey.list("esc,gone,,enter"), [.esc, .enter])
+        XCTAssertEqual(BarKey.list(BarKey.store(BarKey.standard)), BarKey.standard)
     }
 
     /// What the device list and backups hold today. A new Server field that old files lack fails here, not on the phone.
