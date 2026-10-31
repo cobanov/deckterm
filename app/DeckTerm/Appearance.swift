@@ -214,14 +214,17 @@ struct IconKey: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 32, height: 30)
-                .background(theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        Button(action: action) { Self.face(symbol, theme: theme) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+    }
+
+    /// Its look, for a menu that opens from the same kind of key.
+    static func face(_ symbol: String, theme: Theme) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .semibold))
+            .frame(width: 32, height: 30)
+            .background(theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

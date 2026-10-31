@@ -21,8 +21,9 @@ struct DeckTermApp: App {
     }
 }
 
-/// The devices as cards, in as many columns as the screen takes. ⌘1–9 opens one, ⌘N adds one.
-/// With no devices yet, the welcome screen stands in for it.
+/// The devices as cards, in as many columns as the screen takes. ⌘1–9 opens one, ⌘N adds one. While connections
+/// are open, a tab bar (iOS 26's floating glass one) switches to them. With no devices yet, the welcome screen
+/// stands in for it.
 struct ServerList: View {
     @StateObject private var store = Store()
     @StateObject private var sessions = Sessions()
@@ -31,25 +32,31 @@ struct ServerList: View {
     @AppStorage("font") private var font = TermFont.jetBrains
     @State private var editing: Server?
     @State private var deleting: Server?
-    @State private var keyShown = false
     @State private var importing = false
-    @State private var aboutShown = false
     @State private var settingsShown = false
     @State private var notice: String?
+    @State private var connectionsShown = false
 
     var body: some View {
         Group {
             if store.servers.isEmpty {
-                WelcomeScreen(addDevice: { editing = Server() }, addKey: { keyShown = true }, restore: { importing = true })
+                WelcomeScreen(addDevice: { editing = Server() }, restore: { importing = true })
             } else {
-                list
+                let bar: Visibility = sessions.tabs.isEmpty ? .hidden : .visible
+                TabView(selection: $connectionsShown) {
+                    list.toolbar(bar, for: .tabBar)
+                        .tabItem { Label("Vaults", systemImage: "server.rack") }
+                        .tag(false)
+                    connections.toolbar(bar, for: .tabBar)
+                        .tabItem { Label("Connections", systemImage: "terminal") }
+                        .tag(true)
+                }
+                .onChange(of: sessions.tabs.isEmpty) { _, empty in if empty { connectionsShown = false } }
             }
         }
         .tint(theme.accent)
         .sheet(item: $editing) { ServerForm(server: $0, store: store) }
-        .sheet(isPresented: $keyShown) { KeyForm() }
-        .sheet(isPresented: $aboutShown) { AboutSheet() }
-        .sheet(isPresented: $settingsShown) { SettingsScreen() }
+        .sheet(isPresented: $settingsShown) { SettingsScreen(store: store) }
         .fullScreenCover(isPresented: Binding(get: { sessions.active != nil }, set: { if !$0 { sessions.active = nil } })) {
             TerminalScreen(sessions: sessions, device: open)
         }
@@ -62,7 +69,7 @@ struct ServerList: View {
                 store.save(server)
             }
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.json], onCompletion: restore)
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { notice = Backup.restore($0, into: store) }
         .confirmationDialog(Text(verbatim: deleting?.title ?? ""),
                             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                             titleVisibility: .visible, presenting: deleting) { server in
@@ -76,57 +83,60 @@ struct ServerList: View {
         }
     }
 
-    private func restore(_ result: Result<URL, Error>) {
-        do {
-            let url = try result.get()
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            let count = try JSONDecoder().decode(Backup.self, from: Data(contentsOf: url)).restore(into: store)
-            notice = String(localized: "Restored \(count) devices and your settings. Passwords and the SSH key are not in backups: paste the key once.")
-        } catch {
-            notice = String(localized: "Couldn't read the backup: \(error.localizedDescription)")
-        }
-    }
-
     /// The device at this place in the list, connected or brought back.
     private func open(_ index: Int) {
         if store.servers.indices.contains(index) { sessions.show(store.servers[index]) }
     }
 
     private var list: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Mark(theme: theme, font: font, size: 28)
-                Text(verbatim: "deckterm").font(font.font(18, bold: true))
-                Spacer()
-                Menu {
-                    ShareLink(item: Backup(store), preview: SharePreview("DeckTerm backup")) {
-                        Label("Export backup", systemImage: "square.and.arrow.up")
-                    }
-                    Button("Restore from backup", systemImage: "square.and.arrow.down") { importing = true }
-                    Divider()
-                    Button("About DeckTerm", systemImage: "info.circle") { aboutShown = true }
-                } label: {
-                    headerIcon("ellipsis")
-                }
-                .accessibilityLabel("More")
-                headerButton("gearshape", "Settings") { settingsShown = true }
-                headerButton("key", "SSH key") { keyShown = true }
-                headerButton("plus", "Add a device") { editing = Server() }
-                    .keyboardShortcut(shortcut("n"))
+        page {
+            Mark(theme: theme, font: font, size: 28)
+            Text(verbatim: "deckterm").font(font.font(18, bold: true))
+            Spacer()
+            headerButton("gearshape", "Settings") { settingsShown = true }
+            headerButton("plus", "Add a device") { editing = Server() }
+                .keyboardShortcut(shortcut("n"))
+        } cards: {
+            ForEach(Array(store.servers.enumerated()), id: \.element.id) { index, server in
+                card(server, index: index)
             }
-            .padding(.horizontal)
-            // iPadOS draws its window controls over the top-leading corner and reports no inset for them.
-            .padding(.leading, UIDevice.current.model == "iPhone" ? 0 : 56)
-            .padding(.vertical, 10)
+        }
+    }
 
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12)], spacing: 12) {
-                    ForEach(Array(store.servers.enumerated()), id: \.element.id) { index, server in
-                        card(server, index: index)
+    /// A card per tab, a row per pane: tap one to go back to it, hold it to disconnect.
+    private var connections: some View {
+        page {
+            Text("Connections").font(font.font(18, bold: true))
+            Spacer()
+        } cards: {
+            ForEach(sessions.tabs) { tab in
+                VStack(spacing: 0) {
+                    ForEach(tab.panes) { pane in
+                        if pane !== tab.panes.first { Rectangle().fill(theme.fg.opacity(0.08)).frame(height: 1) }
+                        ConnectionRow(model: pane, theme: theme, font: font) { sessions.active = pane }
+                            .contextMenu {
+                                Button("Disconnect", systemImage: "xmark", role: .destructive) { sessions.close(pane) }
+                            }
                     }
                 }
-                .padding([.horizontal, .bottom])
+                .tile(theme)
+            }
+        }
+    }
+
+    /// Cards in as many columns as fit, under a header row, clear of the housing.
+    private func page<Header: View, Cards: View>(@ViewBuilder header: () -> Header,
+                                                 @ViewBuilder cards: () -> Cards) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10, content: header)
+                .frame(minHeight: 34)
+                .padding(.horizontal)
+                // iPadOS draws its window controls over the top-leading corner and reports no inset for them.
+                .padding(.leading, UIDevice.current.model == "iPhone" ? 0 : 56)
+                .padding(.vertical, 10)
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12, alignment: .top)], spacing: 12, content: cards)
+                    .padding([.horizontal, .bottom])
             }
         }
         .clearsHousing(housing.onLeft, corner: 8)
@@ -156,8 +166,7 @@ struct ServerList: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.fg.opacity(0.08)))
+            .tile(theme)
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
@@ -165,6 +174,10 @@ struct ServerList: View {
         .accessibilityLabel(server.title)
         .accessibilityValue(Text(verbatim: "\(server.user)@\(server.address)"))
         .contextMenu {
+            Button("Open in new tab", systemImage: "plus.square.on.square") { sessions.newTab(server) }
+            if !sessions.tabs.isEmpty {
+                Button("Open beside", systemImage: "rectangle.split.2x1") { sessions.split(server) }
+            }
             Button("Edit", systemImage: "pencil") { editing = server }
             Button("Delete", systemImage: "trash", role: .destructive) { deleting = server }
         }
@@ -176,17 +189,53 @@ struct ServerList: View {
     }
 
     private func headerButton(_ symbol: String, _ label: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { headerIcon(symbol) }
-            .buttonStyle(.plain)
-            .accessibilityLabel(label)
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 38, height: 34)
+                .foregroundStyle(theme.fg)
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
+}
 
-    private func headerIcon(_ symbol: String) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 15, weight: .semibold))
-            .frame(width: 38, height: 34)
-            .foregroundStyle(theme.fg)
-            .background(theme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+extension View {
+    /// A card on the list's background.
+    func tile(_ theme: Theme) -> some View {
+        background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.fg.opacity(0.08)))
+    }
+}
+
+/// An open connection in the Connections tab: the host's logo in the connection's color, its name and state.
+private struct ConnectionRow: View {
+    @ObservedObject var model: TerminalModel
+    let theme: Theme
+    let font: TermFont
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    SystemMark(system: model.server.system, font: font, size: 15)
+                        .foregroundStyle(model.state.color(theme))
+                    Text(verbatim: model.server.title).font(font.font(15, bold: true)).lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(model.state.label).font(font.font(11)).foregroundStyle(model.state.color(theme))
+                }
+                Text(verbatim: "\(model.server.user)@\(model.server.address):\(model.server.port)")
+                    .font(font.font(12))
+                    .foregroundStyle(theme.fg.opacity(0.55))
+                    .lineLimit(1)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -208,6 +257,7 @@ struct ServerForm: View {
     @State private var pinned: String?
     @State private var forget = false
     @State private var failed = false
+    @State private var keySaved = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -220,6 +270,14 @@ struct ServerForm: View {
                 SecureField("Password (empty uses the key)", text: $password)
                 if pinned != nil && !forget {
                     Button("Forget host key", role: .destructive) { forget = true }  // on Save, so Cancel undoes it
+                }
+                Section {
+                    NavigationLink { KeyForm() } label: {
+                        LabeledContent("SSH key", value: keySaved ? String(localized: "Saved") : String(localized: "None"))
+                            .onAppear { keySaved = Keychain.get("privateKey") != nil }  // again on coming back
+                    }
+                } footer: {
+                    Text("One ed25519 key for every device. A device with a password uses the password.")
                 }
             }
             .textInputAutocapitalization(.never)
@@ -247,7 +305,7 @@ struct ServerForm: View {
     }
 }
 
-/// One private key for every server, pasted once.
+/// One private key for every server, pasted once, from the device form.
 struct KeyForm: View {
     @State private var pem = ""
     @State private var passphrase = ""
@@ -256,31 +314,28 @@ struct KeyForm: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextEditor(text: $pem)
-                        .font(.caption.monospaced())
-                        .frame(minHeight: 120)
-                    SecureField("Key passphrase (if it has one)", text: $passphrase)
-                } header: {
-                    saved ? Text("Replaces the saved key") : Text("Private key")
-                } footer: {
-                    Text("Paste an OpenSSH ed25519 private key. On a Mac, `pbcopy < ~/.ssh/id_ed25519` copies yours. The key stays in this iPhone's Keychain; its public half goes in each server's `~/.ssh/authorized_keys`.")
-                }
-                if let error {
-                    Text(error).foregroundStyle(.red)
-                }
+        Form {
+            Section {
+                TextEditor(text: $pem)
+                    .font(.caption.monospaced())
+                    .frame(minHeight: 120)
+                SecureField("Key passphrase (if it has one)", text: $passphrase)
+            } header: {
+                saved ? Text("Replaces the saved key") : Text("Private key")
+            } footer: {
+                Text("Paste an OpenSSH ed25519 private key. On a Mac, `pbcopy < ~/.ssh/id_ed25519` copies yours. The key stays in this iPhone's Keychain; its public half goes in each server's `~/.ssh/authorized_keys`.")
             }
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .navigationTitle("SSH key")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save).disabled(pem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+            if let error {
+                Text(error).foregroundStyle(.red)
+            }
+        }
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .navigationTitle("SSH key")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save", action: save).disabled(pem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }

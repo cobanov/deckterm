@@ -40,11 +40,14 @@ targets:
         PROVISIONING_PROFILE_SPECIFIER: $(DECKTERM_PROFILE)
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
+        # The keys with no INFOPLIST_KEY_ setting (launch screen color, background task identifiers); merged with the rest.
+        INFOPLIST_FILE: DeckTerm/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: DeckTerm
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        # The iPhone opens in landscape, held as the deck holds it; when Settings lets it turn, AppDelegate adds portrait.
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        # Every way up, so the launch screen opens as the phone is held and never turns once the app is up: with
+        # landscape alone, an upright phone set to Portrait or Auto opened sideways and then turned. AppDelegate keeps
+        # the app to the orientation Settings chose (landscape by default).
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationLandscapeRight UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: DeckTerm connects to SSH servers on your local network.
         # Only standard SSH crypto, as herdrchat declares for the same stack.

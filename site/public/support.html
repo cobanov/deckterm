@@ -57,7 +57,7 @@
     <ol>
       <li>If you don't have a key yet, create one on your computer with <code>ssh-keygen -t ed25519</code>, then add it to a server with <code>ssh-copy-id user@server</code>.</li>
       <li>Copy the private key. On a Mac: <code>pbcopy &lt; ~/.ssh/id_ed25519</code></li>
-      <li>Paste it into DeckTerm, using the key button beside the device list.</li>
+      <li>Paste it into DeckTerm: open a device's form and tap SSH key.</li>
     </ol>
     <p>The key is stored in the iOS Keychain on this iPhone only, and is never included in backups.</p>
 
@@ -68,6 +68,9 @@
         <tr><th scope="row"><kbd>⌘1</kbd>–<kbd>⌘9</kbd></th><td>Connect to a saved device, or switch to its open session</td></tr>
         <tr><th scope="row"><kbd>⌘N</kbd></th><td>Add a device</td></tr>
         <tr><th scope="row"><kbd>⌘W</kbd></th><td>Back to the device list</td></tr>
+        <tr><th scope="row"><kbd>⌘T</kbd></th><td>Another connection to the same device, in a new tab</td></tr>
+        <tr><th scope="row"><kbd>⌘D</kbd></th><td>Another connection to the same device, beside it</td></tr>
+        <tr><th scope="row"><kbd>⌘[</kbd> <kbd>⌘]</kbd></th><td>Previous or next pane</td></tr>
         <tr><th scope="row"><kbd>⌘=</kbd> <kbd>⌘-</kbd></th><td>Bigger or smaller text</td></tr>
         <tr><th scope="row"><kbd>⌘,</kbd></th><td>Open the side panel</td></tr>
       </tbody>
@@ -76,6 +79,8 @@
 
     <h2 id="sessions">Can I keep several sessions open?</h2>
     <p>Yes. Going back to the device list keeps the session running, and a green dot marks it on its card. Each open session gets a tab on the key bar under the terminal: tap a tab to switch, or hold it to disconnect. <kbd>⌘1</kbd>–<kbd>⌘9</kbd> switch too.</p>
+    <p>A device can have several sessions at once. Press <kbd>⌘T</kbd> for another one in a new tab, or <kbd>⌘D</kbd> to split the screen in two and open it beside the one you're in. The + button in the side panel does the same, and holding a device's card in the list opens it in a new tab or beside the open session. Tap a pane, or press <kbd>⌘[</kbd> and <kbd>⌘]</kbd>, to type in it. Tap the tab you're in for its menu: split, new tab, close either pane or the whole tab.</p>
+    <p>While sessions are open, the device list gets two tabs at the bottom: Vaults for your devices, Connections for the open sessions.</p>
 
     <h2 id="arrows">How does the arrow gesture work?</h2>
     <p>Hold a finger on the terminal, then slide it up, down, left or right. Each step sends one arrow key, and you feel a light haptic tick for each. It's handy for shell history and menus when your keyboard has no arrow keys.</p>
@@ -94,7 +99,7 @@
     </ul>
 
     <h2 id="backup">How do I back up or move my setup?</h2>
-    <p>Open the … menu on the device list and choose Export backup. It holds your devices, pinned host key fingerprints, theme, font and snippets, and you choose where it goes: Files, iCloud Drive, AirDrop and so on. Restore it on any iPhone, including from the welcome screen before you add a device.</p>
+    <p>Open Settings from the device list and choose Export backup. It holds your devices, pinned host key fingerprints, theme, font and snippets, and you choose where it goes: Files, iCloud Drive, AirDrop and so on. Restore it on any iPhone, including from the welcome screen before you add a device.</p>
     <p>Passwords and the private key are never in the backup, so add them again after restoring.</p>
 
     <h2 id="keyboards">Which keyboards work?</h2>
@@ -105,13 +110,13 @@
 
     <h2 id="limits">What can't DeckTerm do yet?</h2>
     <ul>
-      <li>iOS suspends apps in the background, which ends their sessions. Use tmux or screen on the server to keep your work running and pick it up again.</li>
+      <li>On iOS 26 and later, open sessions keep running in the background, shown in the Dynamic Island and on the Lock Screen, until you stop them there or iOS needs the resources back. Earlier iOS suspends apps in the background, which ends their sessions. Either way, tmux or screen on the server keeps your work safe.</li>
       <li>There is no mosh, SFTP, port forwarding or jump host support yet.</li>
-      <li>It's for iPhone only, in landscape, and needs iOS 17 or later.</li>
+      <li>It needs iOS 17 or later. On iPhone it stays in landscape unless you choose Portrait or Auto in Settings.</li>
     </ul>
 
     <h2 id="tips">How do I leave a tip?</h2>
-    <p>Open the … menu, then About. There are three optional tips, Small, Medium and Large, through Apple's In-App Purchase. They unlock nothing; DeckTerm is complete without them.</p>
+    <p>Open Settings, then About DeckTerm. There are three optional tips, Small, Medium and Large, through Apple's In-App Purchase. They unlock nothing; DeckTerm is complete without them.</p>
   </article>
 </main>
 

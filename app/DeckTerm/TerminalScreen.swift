@@ -4,7 +4,8 @@ import GhosttyTerminal
 /// Full-screen terminal with a thin key bar under it. Swipe in from the left edge to go back,
 /// from the right edge for the panel (snippets, files). The deck's Bluetooth keyboard types; the on-screen one
 /// shows only from the bar's key. Hold a finger on the terminal and slide it for arrow keys.
-/// Going back keeps the session open: the bar's tabs, the list and ⌘1–9 switch between them.
+/// Going back keeps the session open: the bar's tabs, the list and ⌘1–9 switch between them. ⌘T opens another
+/// connection to the device in a tab, ⌘D beside it in the same tab, and ⌘[ ⌘] move between panes.
 struct TerminalScreen: View {
     @ObservedObject var sessions: Sessions
     /// ⌘1–9: the list's device by index, connected or brought back.
@@ -14,6 +15,7 @@ struct TerminalScreen: View {
     @AppStorage("font") private var font = TermFont.jetBrains
     @AppStorage("theme") private var theme = Theme.classic
     @AppStorage("tutorialSeen") private var tutorialSeen = false
+    @AppStorage("keyboardShown") private var keyboardShown = false
     @State private var panelShown = false
     @State private var panelDrag: CGFloat = 0
     @State private var settingsShown = false
@@ -26,12 +28,16 @@ struct TerminalScreen: View {
     private func screen(_ model: TerminalModel) -> some View {
         ZStack(alignment: .trailing) {
             VStack(spacing: 0) {
-                TerminalHost(model: model, fontSize: fontSize, font: font, theme: theme, commands: [
-                    .init(input: "=", title: "Bigger text") { fontSize = min(fontSize + 1, 32) },
-                    .init(input: "-", title: "Smaller text") { fontSize = max(fontSize - 1, 8) },
-                    .init(input: ",", title: "Panel") { showPanel(!panelShown) },
-                    .init(input: "w", title: "Back to list") { back() },
-                ] + (1...9).map { n in .init(input: "\(n)", title: "Device \(n)") { device(n - 1) } })
+                PaneGrid {
+                    ForEach(sessions.panes(with: model)) { pane in
+                        TerminalHost(model: pane, focused: pane === model, keyboardShown: keyboardShown,
+                                     fontSize: fontSize, font: font, theme: theme, commands: commands(model))
+                            // Dimmed while another pane has the keys, as Ghostty does.
+                            .overlay { theme.bg.opacity(pane === model ? 0 : 0.35).allowsHitTesting(false) }
+                    }
+                }
+                // The line between panes; a color background would spread into the camera's safe area.
+                .background(theme.fg.opacity(0.15), ignoresSafeAreaEdges: [])
                 .clearsHousing(housing.onLeft)
                 .padding(.horizontal, housing.onLeft == nil ? 6 : 0)  // upright or on an iPad: off the glass's edge
                 // Edge to edge: the camera never reaches down to the bar. Above the home indicator, the rounded
@@ -57,6 +63,8 @@ struct TerminalScreen: View {
             // Always mounted and slid by offset, so opening, dragging and closing are one motion.
             SidePanel(model: model, font: font, theme: theme,
                       back: back, disconnect: { sessions.close(model) }, hide: { showPanel(false) },
+                      newTab: { showPanel(false); sessions.newTab(model.server) },
+                      split: { showPanel(false); sessions.split(model.server) },
                       settings: { settingsShown = true },
                       expandFiles: { showPanel(false); filesShown = true })
                 .offset(x: panelShown ? max(panelDrag, 0) : 460)
@@ -88,6 +96,19 @@ struct TerminalScreen: View {
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
+    private func commands(_ model: TerminalModel) -> [DeckTerminal.Command] {
+        [
+            .init(input: "=", title: "Bigger text") { fontSize = min(fontSize + 1, 32) },
+            .init(input: "-", title: "Smaller text") { fontSize = max(fontSize - 1, 8) },
+            .init(input: ",", title: "Panel") { showPanel(!panelShown) },
+            .init(input: "w", title: "Back to list") { back() },
+            .init(input: "t", title: "New tab") { sessions.newTab(model.server) },
+            .init(input: "d", title: "Split") { sessions.split(model.server) },
+            .init(input: "[", title: "Previous pane") { sessions.cycle(-1) },
+            .init(input: "]", title: "Next pane") { sessions.cycle(1) },
+        ] + (1...9).map { n in .init(input: "\(n)", title: "Device \(n)") { device(n - 1) } }
+    }
+
     private func back() {
         panelShown = false
         sessions.active = nil
@@ -108,31 +129,84 @@ struct TerminalScreen: View {
     }
 }
 
-/// The open connections. They outlive the terminal screen, so each shell stays where it was while another shows.
+/// The open connections, as tabs of panes, any number to one device. They outlive the terminal screen, so each
+/// shell stays where it was while another shows.
 @MainActor final class Sessions: ObservableObject {
-    @Published private(set) var open: [TerminalModel] = []
-    /// The one on screen; nil shows the list.
+    /// Panes on screen together, each its own connection.
+    struct Tab: Identifiable {
+        let id = UUID()
+        var panes: [TerminalModel]
+    }
+
+    /// shortcut: two panes, halves along the longer side; a split tree once someone asks for more.
+    static let maxPanes = 2
+
+    @Published private(set) var tabs: [Tab] = [] {
+        didSet { if #available(iOS 26.0, *) { Keepalive.shared.update(open.map(\.server.title)) } }
+    }
+    /// The pane with the keys; nil shows the list.
     @Published var active: TerminalModel? {
-        didSet { if let active { shown = active } }
+        didSet {
+            guard let active else { return }
+            shown = active
+            // A pane of another tab is off screen until the next layout and can't take the keys yet. The one leaving
+            // lets go of them now, not mid-update as its view goes (see TerminalHost).
+            if !active.terminal.isFirstResponder && !active.terminal.becomeFirstResponder() {
+                _ = oldValue?.terminal.resignFirstResponder()
+            }
+        }
     }
     /// The last one on screen, kept through the screen's closing animation.
     private(set) var shown: TerminalModel?
     /// A connection learned what its host runs: (device id, logo name).
     var detected: (UUID, String) -> Void = { _, _ in }
 
+    var open: [TerminalModel] { tabs.flatMap(\.panes) }
+
+    /// The panes on screen with this one, itself included.
+    func panes(with model: TerminalModel) -> [TerminalModel] {
+        tabs.first { $0.panes.contains { $0 === model } }?.panes ?? [model]
+    }
+
+    /// The device's open session, or a new one.
     func show(_ server: Server) {
-        if let model = open.first(where: { $0.server.id == server.id }) { return active = model }
-        let model = TerminalModel(server: server)
-        model.close = { [weak self, weak model] in if let model { self?.close(model) } }
-        model.detected = { [weak self] system in self?.detected(server.id, system) }
-        open.append(model)
+        if let model = model(for: server) { return active = model }
+        newTab(server)
+    }
+
+    /// Another connection to the device, in a tab of its own.
+    func newTab(_ server: Server) {
+        let model = make(server)
+        tabs.append(Tab(panes: [model]))
+        active = model
+    }
+
+    /// Another connection to the device, beside a pane (the one last on screen unless named); in a new tab when that
+    /// one is full.
+    func split(_ server: Server, beside pane: TerminalModel? = nil) {
+        guard let beside = pane ?? shown, let t = tabs.firstIndex(where: { $0.panes.contains { $0 === beside } }),
+              tabs[t].panes.count < Self.maxPanes,
+              let p = tabs[t].panes.firstIndex(where: { $0 === beside }) else { return newTab(server) }
+        let model = make(server)
+        tabs[t].panes.insert(model, at: p + 1)
         active = model
     }
 
     func close(_ model: TerminalModel) {
         model.disconnect()
-        open.removeAll { $0 === model }
-        if active === model { active = nil }
+        guard let t = tabs.firstIndex(where: { $0.panes.contains { $0 === model } }),
+              let p = tabs[t].panes.firstIndex(where: { $0 === model }) else { return }
+        let rest = tabs[t].panes.filter { $0 !== model }
+        // The keys move to a neighbor while the closing pane is still on screen.
+        if active === model { active = rest.isEmpty ? nil : rest[max(p - 1, 0)] }
+        if rest.isEmpty { tabs.remove(at: t) } else { tabs[t].panes = rest }
+    }
+
+    /// ⌘[ ⌘]: the pane before or after, on into the next tab.
+    func cycle(_ step: Int) {
+        let all = open
+        guard let active, let i = all.firstIndex(where: { $0 === active }) else { return }
+        self.active = all[(i + step + all.count) % all.count]
     }
 
     func model(for server: Server) -> TerminalModel? { open.first { $0.server.id == server.id } }
@@ -147,6 +221,18 @@ struct TerminalScreen: View {
             }
         }
     }
+
+    private func make(_ server: Server) -> TerminalModel {
+        let model = TerminalModel(server: server)
+        model.close = { [weak self, weak model] in if let model { self?.close(model) } }
+        model.detected = { [weak self] system in self?.detected(server.id, system) }
+        // A tap on another pane gives it the keys; the bar and the panel follow.
+        model.terminal.tookKeys = { [weak self, weak model] in
+            guard let self, let model, self.active != nil, self.active !== model else { return }
+            self.active = model
+        }
+        return model
+    }
 }
 
 /// One connection, and the bridge between its terminal view and the SSH session.
@@ -160,8 +246,6 @@ struct TerminalScreen: View {
 
     @Published var server: Server
     @Published private(set) var state = State.connecting
-    /// Off by default: the deck's Bluetooth keyboard types.
-    @Published private(set) var keyboardShown = false
     /// Owned here, not by the screen, so the scrollback survives switching away.
     let terminal = DeckTerminal(frame: .zero)
     var close: () -> Void = {}
@@ -217,12 +301,6 @@ struct TerminalScreen: View {
         })
     }
 
-    func toggleKeyboard() {
-        keyboardShown.toggle()
-        terminal.keyboardShown = keyboardShown
-        _ = terminal.becomeFirstResponder()
-    }
-
     private func received(_ bytes: ArraySlice<UInt8>) {
         if state == .connecting { state = .live }
         io.receive(Data(bytes))
@@ -254,6 +332,8 @@ struct TerminalScreen: View {
     }
 }
 
+extension TerminalModel: Identifiable {}
+
 extension TerminalModel.State {
     /// What the color says, for VoiceOver.
     var label: LocalizedStringKey {
@@ -282,8 +362,10 @@ final class DeckTerminal: UITerminalView {
     }
 
     var commands: [Command] = []
+    /// After it took the keys, from a tap or in code.
+    var tookKeys: () -> Void = {}
     var keyboardShown = false {
-        didSet { reloadInputViews() }
+        didSet { if keyboardShown != oldValue { reloadInputViews() } }
     }
     private let noKeyboard = UIView()
 
@@ -293,6 +375,12 @@ final class DeckTerminal: UITerminalView {
     /// A tap still clicks, but only focuses: the keyboard follows the bar's key, and resigning would cut off the
     /// Bluetooth keyboard too.
     override func toggleSoftwareKeyboard() { _ = becomeFirstResponder() }
+
+    override func becomeFirstResponder() -> Bool {
+        guard super.becomeFirstResponder() else { return false }
+        tookKeys()
+        return true
+    }
 
     override var keyCommands: [UIKeyCommand]? {
         (super.keyCommands ?? []) + commands.map {
@@ -331,9 +419,12 @@ final class DeckTerminal: UITerminalView {
     }
 }
 
-/// Shows the active session's terminal; the session owns it, this only gives it a place on screen.
+/// Shows one pane's terminal; the session owns it, this only gives it a place on screen.
 private struct TerminalHost: UIViewRepresentable {
     let model: TerminalModel
+    /// The pane with the keys, which it takes once it is on screen.
+    let focused: Bool
+    let keyboardShown: Bool
     let fontSize: Double
     let font: TermFont
     let theme: Theme
@@ -344,18 +435,78 @@ private struct TerminalHost: UIViewRepresentable {
     func updateUIView(_ host: UIView, context: Context) {
         let terminal = model.terminal
         terminal.commands = commands
+        terminal.keyboardShown = keyboardShown
         TerminalModel.apply(font: font, size: fontSize, theme: theme)
         // After SwiftUI's update, not inside it: the terminal taken off hands the keyboard focus to SwiftUI's own
-        // view, which then read the graph mid-update, locked up in a cycle and was killed switching tabs. Every
-        // call queues, so the last session picked is the one left showing.
+        // view, which then read the graph mid-update, locked up in a cycle and was killed switching tabs. A pane
+        // leaving the screen has let go of the keys before (Sessions.active).
         DispatchQueue.main.async {
             guard terminal.superview !== host else { return }
             host.subviews.forEach { $0.removeFromSuperview() }
             terminal.frame = host.bounds
             terminal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             host.addSubview(terminal)
-            _ = terminal.becomeFirstResponder()
+            if focused { _ = terminal.becomeFirstResponder() }
         }
+    }
+}
+
+/// A tab's panes as halves of the longer side: side by side in landscape, stacked upright.
+struct PaneGrid: Layout {
+    static let gap: CGFloat = 1
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (pane, frame) in zip(subviews, Self.frames(subviews.count, in: bounds)) {
+            pane.place(at: frame.origin, proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    static func frames(_ count: Int, in bounds: CGRect) -> [CGRect] {
+        count > 0 ? cells(count, perLine: count, in: bounds, wide: bounds.width >= bounds.height, gap: gap) : []
+    }
+}
+
+/// `count` cells in lines of `perLine`, laid along the width (`wide`) or the height; the last line's cells share all
+/// of it.
+func cells(_ count: Int, perLine: Int, in bounds: CGRect, wide: Bool, gap: CGFloat) -> [CGRect] {
+    let lines = (count + perLine - 1) / perLine
+    let (along, across) = wide ? (bounds.width, bounds.height) : (bounds.height, bounds.width)
+    let depth = (across - gap * CGFloat(lines - 1)) / CGFloat(lines)
+    return (0..<count).map { i in
+        let line = i / perLine, slot = i % perLine
+        let slots = min(perLine, count - line * perLine)
+        let length = (along - gap * CGFloat(slots - 1)) / CGFloat(slots)
+        let a = CGFloat(slot) * (length + gap), c = CGFloat(line) * (depth + gap)
+        return wide ? CGRect(x: bounds.minX + a, y: bounds.minY + c, width: length, height: depth)
+                    : CGRect(x: bounds.minX + c, y: bounds.minY + a, width: depth, height: length)
+    }
+}
+
+/// The bar's keys on a narrow screen: as few rows as fit, as even as they go, each the full width.
+struct KeyRows: Layout {
+    static let gap: CGFloat = 3, minWidth: CGFloat = 46, height: CGFloat = 30
+
+    /// (rows, keys per row) for this many keys across this width.
+    static func shape(_ count: Int, width: CGFloat) -> (rows: Int, perRow: Int) {
+        let fit = max(Int((width + gap) / (minWidth + gap)), 1)
+        let rows = max((count + fit - 1) / fit, 1)
+        return (rows, max((count + rows - 1) / rows, 1))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? CGFloat(subviews.count) * (Self.minWidth + Self.gap) - Self.gap
+        let rows = CGFloat(Self.shape(subviews.count, width: width).rows)
+        return CGSize(width: width, height: rows * Self.height + (rows - 1) * Self.gap)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = cells(subviews.count, perLine: Self.shape(subviews.count, width: bounds.width).perRow,
+                           in: bounds, wide: true, gap: Self.gap)
+        for (key, frame) in zip(subviews, frames) { key.place(at: frame.origin, proposal: ProposedViewSize(frame.size)) }
     }
 }
 
@@ -434,10 +585,13 @@ private struct KeyBar: View {
     let font: TermFont
     let panel: () -> Void
     @AppStorage("barKeys") private var barKeys = BarKey.store(BarKey.standard)
+    /// Off by default, the deck's Bluetooth keyboard types; kept as last chosen here or in Settings.
+    @AppStorage("keyboardShown") private var keyboardShown = false
 
     var body: some View {
         // One row when the keys fit beside a little room for the tabs. Narrower (a phone held upright, a slim iPad
-        // window), the keys get rows of their own under the tabs, so none hides off screen.
+        // window), the keys get rows of their own under the tabs, so none hides off screen. Only the wide one keeps
+        // clear of the rounded corners beside it; upright, the corners are below, past the home indicator.
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 3) {
                 tabs.frame(minWidth: 80, idealWidth: 80, maxWidth: .infinity, alignment: .leading)
@@ -445,19 +599,20 @@ private struct KeyBar: View {
                 icons
             }
             .frame(height: 30)
+            .padding(.horizontal, 26)
             VStack(spacing: 3) {
                 HStack(spacing: 3) {
                     tabs.frame(maxWidth: .infinity, alignment: .leading)
                     icons
                 }
                 .frame(height: 30)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 46), spacing: 3)], spacing: 3) { keys(fill: true) }
+                KeyRows { keys(fill: true) }
                     .padding(.bottom, 4)
             }
+            .padding(.horizontal, 8)
         }
         .font(font.font(12))
         .foregroundStyle(theme.fg)
-        .padding(.horizontal, 26)
         .background(theme.surface.ignoresSafeArea())
         .overlay(alignment: .top) { Rectangle().fill(theme.fg.opacity(0.08)).frame(height: 1).ignoresSafeArea() }
     }
@@ -465,9 +620,9 @@ private struct KeyBar: View {
     private var tabs: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 3) {
-                ForEach(sessions.open, id: \.server.id) { tab in
-                    SessionTab(model: tab, active: tab === model, theme: theme, font: font,
-                               select: { sessions.active = tab }, close: { sessions.close(tab) })
+                ForEach(sessions.tabs) { tab in
+                    SessionTab(sessions: sessions, panes: tab.panes, active: tab.panes.contains { $0 === model },
+                               theme: theme, font: font)
                 }
             }
         }
@@ -484,8 +639,11 @@ private struct KeyBar: View {
     }
 
     @ViewBuilder private var icons: some View {
-        icon(model.keyboardShown ? "keyboard.chevron.compact.down" : "keyboard",
-             model.keyboardShown ? "Hide keyboard" : "Show keyboard", model.toggleKeyboard)
+        icon(keyboardShown ? "keyboard.chevron.compact.down" : "keyboard",
+             keyboardShown ? "Hide keyboard" : "Show keyboard") {
+            keyboardShown.toggle()
+            _ = model.terminal.becomeFirstResponder()
+        }
         icon("sidebar.right", "Panel", panel)
     }
 
@@ -511,32 +669,77 @@ private struct KeyBar: View {
     }
 }
 
-/// One open session in the key bar: the host's logo in the connection's color, and its name. Hold it to disconnect.
+/// One tab in the key bar: each pane's host logo in its connection's color, and its name. A tap on another tab
+/// switches to it; on the one showing, or held, it opens the tab's menu.
 private struct SessionTab: View {
-    @ObservedObject var model: TerminalModel
+    @ObservedObject var sessions: Sessions
+    let panes: [TerminalModel]
     let active: Bool
     let theme: Theme
     let font: TermFont
-    let select: () -> Void
-    let close: () -> Void
 
     var body: some View {
-        Button(action: select) {
-            HStack(spacing: 5) {
-                SystemMark(system: model.server.system, font: font, size: 11)
-                    .foregroundStyle(model.state.color(theme))
-                Text(verbatim: model.server.title).lineLimit(1)
-            }
-            .padding(.horizontal, 8)
-            .frame(minHeight: 24)
-            .foregroundStyle(theme.fg.opacity(active ? 1 : 0.5))
-            .background(active ? theme.raised : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        if active {
+            Menu { menu } label: { label }
+                .accessibilityAddTraits(.isSelected)
+        } else {
+            Button { sessions.active = panes.first } label: { label }
+                .buttonStyle(.plain)
+                .contextMenu { menu }
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        HStack(spacing: 7) {
+            ForEach(panes) { pane in
+                // A line between a tab's panes, so one tab of two reads apart from two tabs.
+                if pane !== panes.first { Rectangle().fill(theme.fg.opacity(0.3)).frame(width: 1, height: 12) }
+                PaneLabel(model: pane, theme: theme, font: font)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(minHeight: 24)
+        .foregroundStyle(theme.fg.opacity(active ? 1 : 0.5))
+        .background(active ? theme.raised : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    @ViewBuilder private var menu: some View {
+        if let first = panes.first {
+            if panes.count < Sessions.maxPanes {
+                Button("Split", systemImage: "rectangle.split.2x1") { sessions.split(first.server, beside: first) }
+            }
+            Button("New tab", systemImage: "plus.square.on.square") { sessions.newTab(first.server) }
+        }
+        if panes.count > 1 {
+            Divider()
+            ForEach(Array(panes.enumerated()), id: \.element.id) { index, pane in
+                Button(role: .destructive) { sessions.close(pane) } label: {
+                    Label("Close pane \(index + 1)", systemImage: "xmark.square")
+                    Text(verbatim: pane.server.title)
+                }
+            }
+        }
+        Divider()
+        Button(panes.count > 1 ? "Close tab" : "Disconnect", systemImage: "xmark", role: .destructive) {
+            panes.forEach(sessions.close)
+        }
+    }
+}
+
+private struct PaneLabel: View {
+    @ObservedObject var model: TerminalModel
+    let theme: Theme
+    let font: TermFont
+
+    var body: some View {
+        HStack(spacing: 5) {
+            SystemMark(system: model.server.system, font: font, size: 11)
+                .foregroundStyle(model.state.color(theme))
+            Text(verbatim: model.server.title).lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: model.server.title))
         .accessibilityValue(Text(model.state.label))
-        .accessibilityAddTraits(active ? .isSelected : [])
-        .contextMenu { Button("Disconnect", systemImage: "xmark", role: .destructive, action: close) }
     }
 }
 
@@ -550,6 +753,8 @@ private struct SidePanel: View {
     let back: () -> Void
     let disconnect: () -> Void
     let hide: () -> Void
+    let newTab: () -> Void
+    let split: () -> Void
     let settings: () -> Void
     let expandFiles: () -> Void
     @AppStorage("panelTab") private var tab = Tab.snippets
@@ -572,6 +777,13 @@ private struct SidePanel: View {
                 Spacer(minLength: 4)
                 IconKey("arrow.clockwise", "Reconnect", theme: theme) { model.connect() }
                 IconKey("xmark", "Disconnect", theme: theme, action: disconnect)
+                Menu {
+                    Button("New tab", systemImage: "plus.square.on.square", action: newTab)
+                    Button("Split", systemImage: "rectangle.split.2x1", action: split)
+                } label: {
+                    IconKey.face("plus", theme: theme)
+                }
+                .accessibilityLabel("Another connection")
                 IconKey("gearshape", "Settings", theme: theme, action: settings)
                 IconKey("square.grid.2x2", "Back to list", theme: theme, action: back)
             }
@@ -678,7 +890,7 @@ private struct Tutorial: View {
                 }
                 .padding(.horizontal, 24)
                 Spacer()
-                Text("⌘W back · ⌘1–9 devices · ⌘, panel")
+                Text("⌘W back · ⌘1–9 devices · ⌘T tab · ⌘D split · ⌘, panel")
                     .font(font.font(12))
                     .foregroundStyle(theme.fg.opacity(0.55))
                 Button("Got it", action: done)

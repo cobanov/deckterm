@@ -107,14 +107,29 @@ enum BarKey: String, CaseIterable, Identifiable {
     }
 }
 
-/// The iPhone stays landscape, as the deck holds it, unless Settings lets it turn. iPadOS windows turn and resize
-/// freely, so the lock is the iPhone's alone.
-enum Rotation {
+/// How the iPhone holds the screen, as Settings chose: landscape by default, the way the deck holds it. iPadOS
+/// windows turn and resize freely, so the choice is the iPhone's alone. Stored by raw value.
+enum Rotation: String, CaseIterable {
+    case landscape, portrait, auto
+
     static var mask: UIInterfaceOrientationMask {
-        UIDevice.current.userInterfaceIdiom == .phone && !UserDefaults.standard.bool(forKey: "rotates") ? .landscape : .all
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
+        switch UserDefaults.standard.string(forKey: "orientation").flatMap(Rotation.init) ?? .landscape {
+        case .landscape: return .landscape
+        case .portrait: return .portrait
+        case .auto: return .allButUpsideDown
+        }
     }
 
-    /// After the setting changed: locking again turns an upright phone back to landscape.
+    var title: LocalizedStringKey {
+        switch self {
+        case .landscape: "Landscape"
+        case .portrait: "Portrait"
+        case .auto: "Auto"
+        }
+    }
+
+    /// After the setting changed: the screen turns to the new choice now.
     static func apply() {
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
             var controller = scene.keyWindow?.rootViewController
@@ -133,14 +148,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-/// How DeckTerm looks and behaves: the key bar, the font and theme, the screen. The side panel keeps what a
-/// session uses.
+/// How DeckTerm looks and behaves: the key bar, the font and theme, the screen; backups and About from the list.
+/// The side panel keeps what a session uses.
 struct SettingsScreen: View {
     @AppStorage("barKeys") private var barKeys = BarKey.store(BarKey.standard)
     @AppStorage("fontSize") private var fontSize = 13.0
     @AppStorage("font") private var font = TermFont.jetBrains
     @AppStorage("theme") private var theme = Theme.classic
-    @AppStorage("rotates") private var rotates = false
+    @AppStorage("orientation") private var orientation = Rotation.landscape
+    @AppStorage("keyboardShown") private var keyboardShown = false
+    /// The device list's, for backups; the terminal's Settings has none.
+    var store: Store?
+    @State private var importing = false
+    @State private var notice: String?
+    @State private var aboutShown = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -184,18 +205,32 @@ struct SettingsScreen: View {
                         }
                     }
                 }
-                if UIDevice.current.userInterfaceIdiom == .phone {
-                    Section {
-                        Toggle("Turn with the phone", isOn: $rotates)
-                    } header: {
-                        Text("Screen")
-                    } footer: {
-                        Text("Off keeps DeckTerm in landscape, the way the deck holds the phone, even with rotation lock off.")
+                Section {
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        Picker("Orientation", selection: $orientation) {
+                            ForEach(Rotation.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }
+                    }
+                    Toggle("On-screen keyboard", isOn: $keyboardShown)
+                } header: {
+                    Text("Screen")
+                } footer: {
+                    Text("Landscape is how the deck holds the phone; Auto turns with it. The on-screen keyboard stays off for the deck's own keyboard; the key bar's keyboard button switches it too, and DeckTerm keeps the last choice.")
+                }
+                if let store {
+                    Section("Backup") {
+                        ShareLink(item: Backup(store), preview: SharePreview("DeckTerm backup")) {
+                            Label("Export backup", systemImage: "square.and.arrow.up")
+                        }
+                        Button("Restore from backup", systemImage: "square.and.arrow.down") { importing = true }
                     }
                 }
                 Section {
+                    Button("About DeckTerm", systemImage: "info.circle") { aboutShown = true }
+                }
+                Section {
                 } footer: {
-                    Text("Hold and slide on the terminal: arrow keys. Swipe in from the left edge: your devices; from the right: snippets and files. ⌘W back · ⌘1–9 devices · ⌘= ⌘- text size · ⌘, panel")
+                    Text("Hold and slide on the terminal: arrow keys. Swipe in from the left edge: your devices; from the right: snippets and files. ⌘W back · ⌘1–9 devices · ⌘T new tab · ⌘D split · ⌘[ ⌘] panes · ⌘= ⌘- text size · ⌘, panel")
                 }
             }
             .navigationTitle("Settings")
@@ -203,7 +238,15 @@ struct SettingsScreen: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .onChange(of: rotates) { Rotation.apply() }
+            .onChange(of: orientation) { Rotation.apply() }
+            .sheet(isPresented: $aboutShown) { AboutSheet() }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { picked in
+                if let store { notice = Backup.restore(picked, into: store) }
+            }
+            .alert("Backup", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+            } message: {
+                Text(notice ?? "")
+            }
         }
     }
 

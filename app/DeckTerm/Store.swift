@@ -110,6 +110,19 @@ struct Backup: Codable, Transferable {
         return valid.count
     }
 
+    /// A picked backup file taken into the store; returns what to tell the person.
+    static func restore(_ picked: Result<URL, Error>, into store: Store) -> String {
+        do {
+            let url = try picked.get()
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let count = try JSONDecoder().decode(Backup.self, from: Data(contentsOf: url)).restore(into: store)
+            return String(localized: "Restored \(count) devices and your settings. Passwords and the SSH key are not in backups: paste the key once.")
+        } catch {
+            return String(localized: "Couldn't read the backup: \(error.localizedDescription)")
+        }
+    }
+
     static var transferRepresentation: some TransferRepresentation {
         CodableRepresentation(contentType: .json).suggestedFileName("deckterm-backup.json")
     }

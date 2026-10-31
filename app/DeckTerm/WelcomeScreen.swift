@@ -4,7 +4,6 @@ import SwiftUI
 /// Shown in its final state, with no entrance animation.
 struct WelcomeScreen: View {
     let addDevice: () -> Void
-    let addKey: () -> Void
     let restore: () -> Void
     @AppStorage("theme") private var theme = Theme.classic
     @AppStorage("font") private var font = TermFont.jetBrains
@@ -28,8 +27,6 @@ struct WelcomeScreen: View {
             VStack(spacing: 10) {
                 Button(action: addDevice) { Label("Add a device", systemImage: "plus") }
                     .buttonStyle(PillStyle(theme: theme, font: font, primary: true))
-                Button(action: addKey) { Label("Add an SSH key", systemImage: "key") }
-                    .buttonStyle(PillStyle(theme: theme, font: font))
                 Button(action: restore) { Label("Restore from backup", systemImage: "square.and.arrow.down") }
                     .buttonStyle(PillStyle(theme: theme, font: font))
             }
