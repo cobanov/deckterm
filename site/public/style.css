@@ -102,9 +102,15 @@ kbd {
 .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent); flex: none; }
 .req { margin-top: 16px; color: var(--muted); font-size: 0.9375rem; }
 
-/* A landscape iPhone: the screenshot inside a thin bezel. */
-.phone { margin: 32px 0 0; padding: clamp(5px, 0.9vw, 12px); background: var(--surface); border: 1px solid var(--line); border-radius: clamp(18px, 4.2vw, 56px); }
-.phone img { width: 100%; aspect-ratio: 2200 / 1012; object-fit: cover; border-radius: clamp(13px, 3.3vw, 45px); }
+/* The hero's animation (site/hero), a landscape iPhone running DeckTerm. Its stage brings its own band above the
+   phone; the height is held at the stage's shape before the script loads. */
+.hero-demo { margin: 0; aspect-ratio: 1000 / 588; }
+.hero-demo img { width: 100%; margin-top: 32px; border-radius: clamp(13px, 3.3vw, 45px); }
+/* Its phone design (the stage below 560px) runs the phone off the right edge of the screen, past the column's
+   padding. The bleed starts 20px wider than the phone design, so the stage, measuring a figure that grows by those
+   20px, never draws the phone design without it. */
+@media (max-width: 599px) { .hero-demo { margin-right: -20px; } }
+@media (max-width: 579px) { .hero-demo { aspect-ratio: 350 / 324; } }
 figcaption { margin-top: 12px; color: var(--muted); font-size: 0.9375rem; }
 
 /* Sections */

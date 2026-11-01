@@ -1,0 +1,305 @@
+/* DeckTerm's classic theme, as Theme.classic and the terminal palette set it. The font comes from the host page
+   ("JetBrains Mono", the face the app ships and the site already loads). */
+
+.dt {
+  --dt-bg: #000;
+  --dt-fg: #e6e6e6;
+  --dt-accent: #3ce882;
+  --dt-surface: #101010; /* 7% toward the foreground */
+  --dt-raised: #202020; /* 14% */
+  --dt-hair: rgba(230, 230, 230, 0.08);
+  --dt-green: #31e722; /* ANSI bright green, the live connection and the prompt */
+  --dt-yellow: #eaec23; /* ANSI bright yellow, connecting */
+  --dt-blue: #5833ff; /* ANSI bright blue, the prompt's path */
+  --dt-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* The page is the ground: black, as the site is */
+.dt .ss-stage {
+  background: var(--dt-bg);
+}
+
+/* Keystrokes from the deck's keyboard, as the site draws its <kbd>, a step lighter so they read on black */
+.dt .ss-key {
+  background: #262626;
+  box-shadow: inset 0 0 0 1px #3a3a3a, inset 0 -2px 0 #3a3a3a;
+  color: #fff;
+  font-family: var(--dt-mono);
+}
+
+.dt .dt-device {
+  position: relative;
+}
+
+/* Compact: the stage's crop, which the phone runs off on the right */
+.dt .dt-frame {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.dt .dt-phone {
+  position: absolute;
+  transform: rotate(-90deg);
+  /* On the black page a shadow only shows as a haze around the phone; its band is the edge */
+  box-shadow: none;
+}
+
+/* DeckTerm hides the home indicator on the terminal (persistentSystemOverlays), and in landscape iOS would draw
+   it along the long edge, not where the upright frame puts it */
+.dt .dt-phone .ss-phone__home {
+  display: none;
+}
+
+/* The landscape screen, in points, turned back upright inside the turned phone */
+.dt .dt-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 874px;
+  height: 402px;
+  overflow: hidden;
+  transform-origin: 0 0;
+  transform: translateX(402px) rotate(90deg);
+  background: var(--dt-bg);
+  color: var(--dt-fg);
+  font-family: var(--dt-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The list: the island's side keeps iOS's 62pt, the other only clears the corner (clearsHousing) */
+.dt .dt-list {
+  position: absolute;
+  inset: 0;
+  padding: 12px 24px 0 78px;
+}
+
+.dt .dt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  margin: 10px 0;
+}
+
+.dt .dt-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6.7px;
+  background: var(--dt-raised);
+  color: var(--dt-accent);
+}
+
+.dt .dt-mark svg {
+  width: 16.8px;
+  height: 16.8px;
+}
+
+.dt .dt-brand {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.32;
+}
+
+.dt .dt-hbtn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--dt-raised);
+}
+
+.dt .dt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dt .dt-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--dt-surface);
+  box-shadow: inset 0 0 0 1px var(--dt-hair);
+  transition: background-color 0.12s ease-out;
+}
+
+.dt .dt-card[data-pressed] {
+  background: var(--dt-raised);
+}
+
+.dt .dt-card__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.32;
+}
+
+.dt .dt-card__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dt .dt-card__key {
+  font-size: 11px;
+  color: rgba(230, 230, 230, 0.35);
+}
+
+.dt .dt-card__login {
+  font-size: 12px;
+  line-height: 1.32;
+  color: rgba(230, 230, 230, 0.55);
+  white-space: nowrap;
+}
+
+.dt .dt-os {
+  display: block;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: var(--src) center / contain no-repeat;
+  mask: var(--src) center / contain no-repeat;
+}
+
+.dt .dt-card .dt-os {
+  color: var(--dt-accent);
+}
+
+/* The terminal: a full-screen cover that comes up over the list and goes down when its last pane closes */
+.dt .dt-term {
+  position: absolute;
+  inset: 0;
+  background: var(--dt-bg);
+  transform: translateY(100%);
+  transition: transform 0.5s cubic-bezier(0.3, 0.75, 0.1, 1);
+  /* A layer for good, so the text doesn't hop a fraction of a pixel as the cover lands */
+  will-change: transform;
+}
+
+.dt .dt-term[data-open] {
+  transform: none;
+}
+
+/* Under the key bar, iOS's bottom safe area in landscape (21pt): the bar's surface runs on down to the edge, so
+   the screen's rounded corners stay clear of the tab and the keys */
+.dt .dt-term::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 21px;
+  background: var(--dt-surface);
+}
+
+.dt .dt-lines {
+  position: absolute;
+  top: 14px;
+  right: 26px;
+  left: 64px;
+  font-size: 18px;
+  line-height: 24px;
+  white-space: pre;
+}
+
+.dt .dt-line {
+  height: 24px;
+  animation: dt-in 0.12s ease-out;
+}
+
+.dt .dt-line b {
+  font-weight: 700;
+}
+
+.dt .dt-g {
+  color: var(--dt-green);
+}
+
+.dt .dt-b {
+  color: var(--dt-blue);
+}
+
+/* Ghostty's block cursor, in the theme's cursor color */
+.dt .dt-cur {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10.8px;
+  height: 24px;
+  background: var(--dt-accent);
+}
+
+@keyframes dt-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The key bar: the session's tab on the left, the keys a small keyboard lacks on the right */
+.dt .dt-bar {
+  position: absolute;
+  right: 0;
+  bottom: 21px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+  padding: 0 26px;
+  background: var(--dt-surface);
+  box-shadow: inset 0 1px 0 var(--dt-hair);
+  font-size: 12px;
+}
+
+.dt .dt-tab {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  max-width: max-content;
+  height: 24px;
+  margin-right: auto;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--dt-raised);
+}
+
+.dt .dt-tab__logo {
+  color: var(--dt-yellow);
+  transition: color 0.2s ease;
+}
+
+.dt .dt-tab__logo[data-live] {
+  color: var(--dt-green);
+}
+
+.dt .dt-keys {
+  display: flex;
+  gap: 3px;
+}
+
+.dt .dt-key {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--dt-raised);
+}
+
+.dt .dt-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 24px;
+}

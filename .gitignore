@@ -2,3 +2,4 @@
 app/build/
 app/DeckTerm.xcodeproj/
 site/.wrangler/
+site/hero/node_modules/

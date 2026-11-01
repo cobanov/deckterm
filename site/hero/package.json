@@ -1,0 +1,17 @@
+{
+  "name": "deckterm-hero",
+  "private": true,
+  "type": "module",
+  "description": "The site hero's animation: DeckTerm on a phone held sideways, built with the stageshow kit in kit/.",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "lucide-react": "0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "vite": "^6.4.5"
+  }
+}
