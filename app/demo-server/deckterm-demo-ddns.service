@@ -1,8 +1,0 @@
-[Unit]
-Description=Point demo.deckterm.cobanov.dev at the home IP
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/opt/deckterm-demo/ddns.sh

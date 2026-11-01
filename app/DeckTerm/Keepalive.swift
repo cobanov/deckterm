@@ -59,7 +59,10 @@ import os
         ticker = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.task?.progress.completedUnitCount += 1 }
         }
-        task.expirationHandler = { [weak self] in
+        task.expirationHandler = { [weak self, weak task] in
+            // Completed, not just let go: a task left running past its time can get the app killed, not suspended,
+            // and every session with it.
+            task?.setTaskCompleted(success: false)
             DispatchQueue.main.async {
                 self?.log.notice("expired by the system")
                 self?.clear()

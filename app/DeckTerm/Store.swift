@@ -13,6 +13,7 @@ struct Server: Codable, Identifiable, Hashable {
     var system: String?
 
     var title: String { name.isEmpty ? address : name }
+    var login: String { "\(user)@\(address):\(port)" }
     /// Host keys are pinned per address, so pointing a server somewhere else starts a fresh pin.
     var pinKey: String { "\(address):\(port)" }
     var passwordAccount: String { "password.\(id.uuidString)" }

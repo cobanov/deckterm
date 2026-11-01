@@ -16,7 +16,7 @@ struct AboutSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     HStack(spacing: 14) {
                         Mark(theme: theme, size: 52)
@@ -63,6 +63,7 @@ struct AboutSheet: View {
 
 /// Acknowledgements.txt, one page per "### name version" section: the MIT and Apache licenses ask for their notices.
 private struct LicensesView: View {
+    @AppStorage("theme") private var theme = Theme.classic
     private let sections: [(title: String, text: String)] = {
         let url = Bundle.main.url(forResource: "Acknowledgements", withExtension: "txt")
         let all = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
@@ -73,7 +74,7 @@ private struct LicensesView: View {
     }()
 
     var body: some View {
-        List {
+        ThemedForm {
             Section {
                 ForEach(sections, id: \.title) { section in
                     NavigationLink(section.title) {
@@ -83,6 +84,7 @@ private struct LicensesView: View {
                                 .textSelection(.enabled)
                                 .padding()
                         }
+                        .background(theme.bg.ignoresSafeArea())
                         .navigationTitle(section.title)
                     }
                 }

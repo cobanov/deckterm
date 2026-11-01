@@ -11,9 +11,11 @@ enum BarKey: String, CaseIterable, Identifiable {
     /// The bar until Settings changes it.
     static let standard: [BarKey] = [.esc, .tab, .enter, .ctrlC, .ctrlD, .ctrlZ, .pipe, .tilde, .left, .down, .up, .right]
 
-    /// The bar as stored under "barKeys": raw values, comma separated. Unknown ones are dropped.
+    /// The bar as stored under "barKeys": raw values, comma separated. Unknown ones and repeats are dropped: a key
+    /// twice (a hand-edited backup) gave the bar's and Settings' lists one id for two rows.
     static func list(_ stored: String) -> [BarKey] {
-        stored.split(separator: ",").compactMap { BarKey(rawValue: String($0)) }
+        var seen = Set<BarKey>()
+        return stored.split(separator: ",").compactMap { BarKey(rawValue: String($0)) }.filter { seen.insert($0).inserted }
     }
 
     static func store(_ keys: [BarKey]) -> String { keys.map(\.rawValue).joined(separator: ",") }
@@ -200,7 +202,7 @@ struct SettingsScreen: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section("Key bar") {
                     NavigationLink {
                         KeyBarSettings()
@@ -311,7 +313,7 @@ private struct KeyBarSettings: View {
 
     var body: some View {
         let shown = BarKey.list(barKeys)
-        List {
+        ThemedForm {
             Section {
                 ForEach(shown) { row($0) }
                     .onMove { from, to in
@@ -327,13 +329,13 @@ private struct KeyBarSettings: View {
             } header: {
                 Text("On the bar")
             } footer: {
-                Text("Drag to reorder. The keys scroll when they don't fit.")
+                Text("Drag to reorder. Keys that don't fit wrap onto more rows.")
             }
             Section("More keys") {
                 ForEach(BarKey.allCases.filter { !shown.contains($0) }) { key in
                     Button { barKeys = BarKey.store(shown + [key]) } label: {
                         HStack {
-                            Image(systemName: "plus.circle.fill").foregroundStyle(.green)
+                            Image(systemName: "plus.circle.fill").foregroundStyle(.tint)
                             row(key)
                         }
                     }

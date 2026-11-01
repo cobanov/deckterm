@@ -29,16 +29,17 @@ struct TerminalScreen: View {
     private func screen(_ model: TerminalModel) -> some View {
         ZStack(alignment: .trailing) {
             VStack(spacing: 0) {
-                PaneGrid {
-                    ForEach(sessions.panes(with: model)) { pane in
-                        TerminalHost(model: pane, focused: pane === model, keyboardShown: sessions.keyboardUp,
-                                     fontSize: fontSize, font: font, theme: theme, commands: commands(model))
-                            // Dimmed while another pane has the keys, as Ghostty does.
-                            .overlay { theme.bg.opacity(pane === model ? 0 : 0.35).allowsHitTesting(false) }
+                // Every tab stays mounted, the others hidden and not drawing: a terminal taken out of the window
+                // and put back left its place empty for a frame, a grey flash on every switch of tabs.
+                ZStack {
+                    ForEach(sessions.tabs) { tab in
+                        grid(tab.panes, model: model, showing: tab.panes.contains { $0 === model })
+                    }
+                    // Closing: its tab is gone, the screen not yet.
+                    if !sessions.tabs.contains(where: { $0.panes.contains { $0 === model } }) {
+                        grid([model], model: model, showing: true)
                     }
                 }
-                // The line between panes; a color background would spread into the camera's safe area.
-                .background(theme.fg.opacity(0.15), ignoresSafeAreaEdges: [])
                 .clearsHousing(housing.onLeft)
                 .padding(.horizontal, housing.onLeft == nil ? 6 : 0)  // upright or on an iPad: off the glass's edge
                 // Edge to edge: the camera never reaches down to the bar. Above the home indicator, the rounded
@@ -98,6 +99,23 @@ struct TerminalScreen: View {
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
+    /// One tab's panes; `model` has the keys.
+    private func grid(_ panes: [TerminalModel], model: TerminalModel, showing: Bool) -> some View {
+        PaneGrid {
+            ForEach(panes) { pane in
+                TerminalHost(model: pane, focused: pane === model, visible: showing, keyboardShown: sessions.keyboardUp,
+                             fontSize: fontSize, font: font, theme: theme, commands: commands(model))
+                    // Dimmed while another pane has the keys, as Ghostty does.
+                    .overlay { theme.bg.opacity(pane === model ? 0 : 0.35).allowsHitTesting(false) }
+            }
+        }
+        // The line between panes; a color background would spread into the camera's safe area.
+        .background(theme.fg.opacity(0.15), ignoresSafeAreaEdges: [])
+        .opacity(showing ? 1 : 0)
+        .allowsHitTesting(showing)
+        .accessibilityHidden(!showing)
+    }
+
     private func commands(_ model: TerminalModel) -> [DeckTerminal.Command] {
         [
             .init(input: "=", title: "Bigger text") { fontSize = min(fontSize + 1, 32) },
@@ -144,15 +162,15 @@ struct TerminalScreen: View {
     static let maxPanes = 2
 
     @Published private(set) var tabs: [Tab] = [] {
-        didSet { if #available(iOS 26.0, *) { Keepalive.shared.update(open.map(\.server.title)) } }
+        didSet { keepAlive() }
     }
     /// The pane with the keys; nil shows the list.
     @Published var active: TerminalModel? {
         didSet {
             guard let active else { return }
             shown = active
-            // A pane of another tab is off screen until the next layout and can't take the keys yet. The one leaving
-            // lets go of them now, not mid-update as its view goes (see TerminalHost).
+            // Another tab's pane is mounted, hidden, and takes the keys at once; a new one is off screen until the
+            // next layout and can't yet, so the one leaving lets go of them now, not mid-update (see TerminalHost).
             if !active.terminal.isFirstResponder && !active.terminal.becomeFirstResponder() {
                 _ = oldValue?.terminal.resignFirstResponder()
             }
@@ -169,9 +187,15 @@ struct TerminalScreen: View {
 
     var open: [TerminalModel] { tabs.flatMap(\.panes) }
 
-    /// The panes on screen with this one, itself included.
-    func panes(with model: TerminalModel) -> [TerminalModel] {
-        tabs.first { $0.panes.contains { $0 === model } }?.panes ?? [model]
+    /// The names of the connections not dropped. One that dropped stays as a pane, waiting for Enter, but keeps
+    /// nothing running: with it, the island went on saying "1 connection" with none up.
+    var alive: [String] {
+        open.filter { if case .ended = $0.state { false } else { true } }.map(\.server.title)
+    }
+
+    /// After every change to the panes, their states or their names.
+    private func keepAlive() {
+        if #available(iOS 26.0, *) { Keepalive.shared.update(alive) }
     }
 
     /// The device's open session, or a new one.
@@ -226,12 +250,14 @@ struct TerminalScreen: View {
                 close(model)
             }
         }
+        keepAlive()  // a renamed device, which changes no tab
     }
 
     private func make(_ server: Server) -> TerminalModel {
         let model = TerminalModel(server: server)
         model.close = { [weak self, weak model] in if let model { self?.close(model) } }
         model.detected = { [weak self] system in self?.detected(server.id, system) }
+        model.stateChanged = { [weak self] in self?.keepAlive() }
         // A tap on another pane gives it the keys; the bar and the panel follow.
         model.terminal.tookKeys = { [weak self, weak model] in
             guard let self, let model else { return }
@@ -253,11 +279,14 @@ struct TerminalScreen: View {
     private static let controller = TerminalController(configuration: .default, theme: TerminalTheme())
 
     @Published var server: Server
-    @Published private(set) var state = State.connecting
+    @Published private(set) var state = State.connecting {
+        didSet { if state != oldValue { stateChanged() } }
+    }
     /// Owned here, not by the screen, so the scrollback survives switching away.
     let terminal = DeckTerminal(frame: .zero)
     var close: () -> Void = {}
     var detected: (String) -> Void = { _ in }
+    var stateChanged: () -> Void = {}
     /// SFTP on the shell's own connection.
     private(set) lazy var files = RemoteFiles { [weak self] in self?.session?.client }
     private let pad = ArrowPad()
@@ -432,6 +461,8 @@ private struct TerminalHost: UIViewRepresentable {
     let model: TerminalModel
     /// The pane with the keys, which it takes once it is on screen.
     let focused: Bool
+    /// Its tab is the one showing; a hidden tab's terminal stops drawing but keeps its place.
+    let visible: Bool
     let keyboardShown: Bool
     let fontSize: Double
     let font: TermFont
@@ -442,6 +473,9 @@ private struct TerminalHost: UIViewRepresentable {
 
     func updateUIView(_ host: UIView, context: Context) {
         let terminal = model.terminal
+        // Until the terminal arrives (a runloop later, below), the theme's background, not the grey under the panes.
+        host.backgroundColor = UIColor(theme.bg)
+        terminal.setSurfaceVisible(visible)
         terminal.commands = commands
         terminal.keyboardShown = keyboardShown
         TerminalModel.apply(font: font, size: fontSize, theme: theme)
@@ -776,7 +810,7 @@ private struct SidePanel: View {
                     .foregroundStyle(model.state.color(theme))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: model.server.title).font(font.font(14, bold: true))
-                    Text(verbatim: "\(model.server.user)@\(model.server.address):\(model.server.port)")
+                    Text(verbatim: model.server.login)
                         .font(font.font(11))
                         .foregroundStyle(theme.fg.opacity(0.55))
                 }

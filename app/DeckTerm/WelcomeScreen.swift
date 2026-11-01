@@ -5,6 +5,7 @@ import SwiftUI
 struct WelcomeScreen: View {
     let addDevice: () -> Void
     let restore: () -> Void
+    let tryDemo: () -> Void
     @AppStorage("theme") private var theme = Theme.classic
     @AppStorage("font") private var font = TermFont.jetBrains
     @Environment(\.horizontalSizeClass) private var width
@@ -27,6 +28,8 @@ struct WelcomeScreen: View {
             VStack(spacing: 10) {
                 Button(action: addDevice) { Label("Add a device", systemImage: "plus") }
                     .buttonStyle(PillStyle(theme: theme, font: font, primary: true))
+                Button(action: tryDemo) { Label("Try the demo", systemImage: "play") }
+                    .buttonStyle(PillStyle(theme: theme, font: font))
                 Button(action: restore) { Label("Restore from backup", systemImage: "square.and.arrow.down") }
                     .buttonStyle(PillStyle(theme: theme, font: font))
             }

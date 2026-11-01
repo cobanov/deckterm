@@ -1,9 +1,0 @@
-[Unit]
-Description=Check the home IP for demo.deckterm.cobanov.dev every 5 minutes
-
-[Timer]
-OnBootSec=1min
-OnUnitActiveSec=5min
-
-[Install]
-WantedBy=timers.target

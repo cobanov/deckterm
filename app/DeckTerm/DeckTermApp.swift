@@ -46,7 +46,7 @@ struct ServerList: View {
     var body: some View {
         Group {
             if store.servers.isEmpty {
-                WelcomeScreen(addDevice: { editing = Server() }, restore: { importing = true })
+                WelcomeScreen(addDevice: { editing = Server() }, restore: { importing = true }, tryDemo: { Demo.add(to: store) })
             } else {
                 let bar: Visibility = sessions.tabs.isEmpty ? .hidden : .visible
                 TabView(selection: $connectionsShown) {
@@ -169,33 +169,22 @@ struct ServerList: View {
 
     private func card(_ server: Server, index: Int) -> some View {
         Button { sessions.show(server) } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    SystemMark(system: server.system, font: font, size: 15).foregroundStyle(theme.accent)
-                    Text(verbatim: server.title).font(font.font(15, bold: true)).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if let session = sessions.model(for: server) { LiveDot(model: session, theme: theme) }
-                    if index < 9 {
-                        Text(verbatim: "⌘\(index + 1)")
-                            .font(font.font(11))
-                            .foregroundStyle(theme.fg.opacity(0.35))
-                            .accessibilityHidden(true)
-                    }
+            DeviceRow(server: server, logo: theme.accent, theme: theme, font: font) {
+                if let session = sessions.model(for: server) { LiveDot(model: session, theme: theme) }
+                if index < 9 {
+                    Text(verbatim: "⌘\(index + 1)")
+                        .font(font.font(11))
+                        .foregroundStyle(theme.fg.opacity(0.35))
+                        .accessibilityHidden(true)
                 }
-                Text(verbatim: "\(server.user)@\(server.address):\(server.port)")
-                    .font(font.font(12))
-                    .foregroundStyle(theme.fg.opacity(0.55))
-                    .lineLimit(1)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
             .tile(theme)
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
         .keyboardShortcut(index < 9 ? shortcut(KeyEquivalent(Character(String(index + 1)))) : nil)
         .accessibilityLabel(server.title)
-        .accessibilityValue(Text(verbatim: "\(server.user)@\(server.address)"))
+        .accessibilityValue(Text(verbatim: server.login))
         .contextMenu {
             Button("Open in new tab", systemImage: "plus.square.on.square") { sessions.newTab(server) }
             if !sessions.tabs.isEmpty {
@@ -232,6 +221,33 @@ extension View {
     }
 }
 
+/// A device's card in the list, or a connection's row in the Connections tab: its logo, name and login, with
+/// `trailing` beside the name.
+private struct DeviceRow<Trailing: View>: View {
+    let server: Server
+    let logo: SwiftUI.Color
+    let theme: Theme
+    let font: TermFont
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                SystemMark(system: server.system, font: font, size: 15).foregroundStyle(logo)
+                Text(verbatim: server.title).font(font.font(15, bold: true)).lineLimit(1)
+                Spacer(minLength: 4)
+                trailing
+            }
+            Text(verbatim: server.login)
+                .font(font.font(12))
+                .foregroundStyle(theme.fg.opacity(0.55))
+                .lineLimit(1)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// An open connection in the Connections tab: the host's logo in the connection's color, its name and state.
 private struct ConnectionRow: View {
     @ObservedObject var model: TerminalModel
@@ -241,21 +257,9 @@ private struct ConnectionRow: View {
 
     var body: some View {
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    SystemMark(system: model.server.system, font: font, size: 15)
-                        .foregroundStyle(model.state.color(theme))
-                    Text(verbatim: model.server.title).font(font.font(15, bold: true)).lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(model.state.label).font(font.font(11)).foregroundStyle(model.state.color(theme))
-                }
-                Text(verbatim: "\(model.server.user)@\(model.server.address):\(model.server.port)")
-                    .font(font.font(12))
-                    .foregroundStyle(theme.fg.opacity(0.55))
-                    .lineLimit(1)
+            DeviceRow(server: model.server, logo: model.state.color(theme), theme: theme, font: font) {
+                Text(model.state.label).font(font.font(11)).foregroundStyle(model.state.color(theme))
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -285,7 +289,7 @@ struct ServerForm: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 TextField("Name (optional)", text: $server.name)
                 TextField("Address", text: $server.address).keyboardType(.URL)
                 TextField("Port", value: $server.port, format: .number.grouping(.never)).keyboardType(.numberPad)
@@ -337,7 +341,7 @@ struct KeyForm: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Form {
+        ThemedForm {
             Section {
                 TextEditor(text: $pem)
                     .font(.caption.monospaced())

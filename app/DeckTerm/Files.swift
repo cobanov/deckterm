@@ -1,6 +1,7 @@
 import SwiftUI
 import Citadel
 import NIOCore
+import os
 
 /// The session's host over SFTP, on the connection its shell already has: no second login, and it ends with the shell.
 /// The panel and the full screen show the same one, so both stay in the same folder.
@@ -53,10 +54,16 @@ import NIOCore
         return (try? await client().getAttributes(at: child(entry.name)))?.isFolder ?? false
     }
 
+    /// Where a host's file lands in `folder`. The name is the host's word: one with a "/" (`../../Library/x`) wrote
+    /// outside the folder, and the share sheet's cleanup then deleted the folder it landed in.
+    nonisolated static func local(_ name: String, in folder: URL) -> URL {
+        folder.appendingPathComponent(name.replacingOccurrences(of: "/", with: "_"))
+    }
+
     /// Into a fresh temporary folder, for the share sheet, which deletes it when it closes.
     func download(_ entry: Entry) async -> URL? {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let url = folder.appendingPathComponent(entry.name)
+        let url = Self.local(entry.name, in: folder)
         if await run(String(localized: "Downloading \(entry.name)…"), { sftp in
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try await sftp.download(self.child(entry.name), to: url)
@@ -68,15 +75,20 @@ import NIOCore
     }
 
     func upload(_ urls: [URL]) async {
+        var refused: String?
         for url in urls {
             let ok = await run(String(localized: "Uploading \(url.lastPathComponent)…")) { sftp in
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 try await sftp.upload(url, to: self.child(url.lastPathComponent))
             }
-            if !ok { break }
+            if !ok {
+                refused = failure
+                break
+            }
         }
-        await load()
+        await load()  // what went up before a refusal shows; the listing clears `failure`, so the reason goes back
+        if let refused { failure = refused }
     }
 
     func makeFolder(_ name: String) async {
@@ -129,9 +141,35 @@ import NIOCore
         guard let connection = connection(), connection.isConnected else {
             throw Session.Failure(errorDescription: String(localized: "Not connected."))
         }
-        let sftp = try await connection.openSFTP()
+        let sftp = try await Self.open(connection)
         self.sftp = sftp
         return sftp
+    }
+
+    /// Citadel waits for ever on a host without SFTP (no `Subsystem sftp` in its sshd): the refusal comes back as an
+    /// event it never reads, and the panel said "Loading…" for good. Its own wait ends with the connection.
+    private static func open(_ connection: SSHClient) async throws -> SFTPClient {
+        let pending = OSAllocatedUnfairLock<CheckedContinuation<SFTPClient, Error>?>(initialState: nil)
+        @Sendable func finish(_ result: Result<SFTPClient, Error>) -> Bool {
+            guard let continuation = pending.withLock({ state in defer { state = nil }; return state }) else { return false }
+            continuation.resume(with: result)
+            return true
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            pending.withLock { $0 = continuation }
+            Task {
+                do {
+                    let sftp = try await connection.openSFTP()
+                    if !finish(.success(sftp)) { try? await sftp.close() }  // too late: the panel already said so
+                } catch {
+                    _ = finish(.failure(error))
+                }
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(15))
+                _ = finish(.failure(Session.Failure(errorDescription: String(localized: "The host didn't open SFTP. Its sshd may not offer it: OpenSSH needs a Subsystem sftp line."))))
+            }
+        }
     }
 }
 
@@ -192,8 +230,10 @@ struct FilesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
+                // Off while something is under way, as the rows are: RemoteFiles does one thing at a time and
+                // drops what comes meanwhile, so an upload picked during a download went nowhere, unsaid.
                 IconKey("chevron.up", "Up", theme: theme) { Task { await files.load(files.path + "/..") } }
-                    .disabled(files.path.isEmpty || files.path == "/")
+                    .disabled(files.path.isEmpty || files.path == "/" || files.busy != nil)
                 Text(verbatim: files.path)
                     .font(font.font(11))
                     .foregroundStyle(theme.fg.opacity(0.55))
@@ -201,10 +241,11 @@ struct FilesView: View {
                     .truncationMode(.head)
                 Spacer(minLength: 4)
                 IconKey("arrow.clockwise", "Refresh", theme: theme) { Task { await files.load() } }
+                    .disabled(files.busy != nil)
                 IconKey("folder.badge.plus", "New folder", theme: theme) { name = ""; naming = .folder }
-                    .disabled(files.path.isEmpty)
+                    .disabled(files.path.isEmpty || files.busy != nil)
                 IconKey("square.and.arrow.up", "Upload", theme: theme) { importing = true }
-                    .disabled(files.path.isEmpty)
+                    .disabled(files.path.isEmpty || files.busy != nil)
                 IconKey(corner.symbol, corner.label, theme: theme, action: corner.action)
             }
             if let failure = files.failure {
@@ -269,7 +310,8 @@ struct FilesView: View {
                         Text(modified, format: .dateTime.year().month().day().hour().minute())
                     }
                     if !entry.isFolder, let size = entry.attributes.size {
-                        Text(Int64(size), format: .byteCount(style: .file)).frame(minWidth: wide ? 80 : 0, alignment: .trailing)
+                        // Clamped: SFTP's size is unsigned, and one past Int64.max from the host stopped the app.
+                        Text(Int64(clamping: size), format: .byteCount(style: .file)).frame(minWidth: wide ? 80 : 0, alignment: .trailing)
                     }
                 }
                 .font(font.font(10))

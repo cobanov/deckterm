@@ -137,6 +137,20 @@ enum TermFont: String, CaseIterable, Identifiable {
     }
 }
 
+/// A Form in the theme's colors. The system's grouped colors follow how a sheet sits, not the theme: an iPhone sheet
+/// fills the landscape screen and is black, the card it is in portrait grey.
+struct ThemedForm<Content: View>: View {
+    @ViewBuilder var content: Content
+    @AppStorage("theme") private var theme = Theme.classic
+
+    var body: some View {
+        Form { content.listRowBackground(theme.surface) }
+            .scrollContentBackground(.hidden)
+            .background(theme.bg.ignoresSafeArea())
+            .tint(theme.accent)
+    }
+}
+
 /// The app icon's hinge, drawn flat in the current theme: the lid in the accent, the base a step deeper.
 struct Mark: View {
     let theme: Theme

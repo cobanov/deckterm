@@ -68,6 +68,13 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(Pins.get(server.pinKey), "SHA256:not-this-host", "a mismatch must not overwrite the pin")
     }
 
+    /// The message comes from matching Citadel's error by name: a rename there shows up here, not as a bare error.
+    func testRefusedLoginSaysSo() {
+        server.user = "deckterm-nobody"
+        let refused = run(until: { _ in false })
+        XCTAssertTrue(refused.ended??.contains("refused the login") == true, String(describing: refused.ended))
+    }
+
     /// A session whose connection is up, for SFTP beside the shell.
     @MainActor private func connected() async throws -> Session {
         let session = Session()
@@ -106,5 +113,18 @@ final class SessionTests: XCTestCase {
         for _ in 0..<300 { await files.load() }
         XCTAssertNil(files.failure)
         XCTAssertFalse(files.entries.isEmpty)
+    }
+}
+
+/// A file's name is the host's to choose; where it lands on the phone is not.
+final class DownloadPathTests: XCTestCase {
+    func testHostNamesStayInTheFolder() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("download")
+        for name in ["notes.txt", "../../Library/Preferences/x.plist", "a/b", "/etc/passwd"] {
+            let url = RemoteFiles.local(name, in: folder)
+            XCTAssertEqual(url.deletingLastPathComponent().path, folder.path, name)
+            XCTAssertEqual(url.standardizedFileURL.deletingLastPathComponent().path, folder.standardizedFileURL.path, name)
+        }
+        XCTAssertEqual(RemoteFiles.local("notes.txt", in: folder).lastPathComponent, "notes.txt")
     }
 }

@@ -15,7 +15,15 @@ final class Session: @unchecked Sendable {
     private enum Event {
         case data([UInt8])
         case resize(cols: Int, rows: Int)
+        /// The size again, unchanged: traffic on an idle connection, see `heartbeat`.
+        case heartbeat
     }
+
+    /// Citadel sends no keepalive and keeps its socket to itself, so a NAT that dropped an idle connection left the
+    /// pane green and dead for good. Every minute the PTY's size goes out again: it keeps the NAT's mapping open, and on
+    /// a link already gone the write makes the socket fail, which ends the session. The same size changes nothing on
+    /// the host (no SIGWINCH).
+    private static let heartbeat = Duration.seconds(60)
 
     private let events: AsyncStream<Event>
     private let input: AsyncStream<Event>.Continuation
@@ -43,13 +51,14 @@ final class Session: @unchecked Sendable {
                output: @escaping @Sendable (ArraySlice<UInt8>) -> Void,
                detected: @escaping @Sendable (String) -> Void,
                ended: @escaping @Sendable (String?) -> Void) {
-        let events = self.events
+        let events = self.events, input = self.input
         task = Task {
             let validator = PinValidator(pinKey: server.pinKey)
             // A group per connection: Citadel never closes the socket of a failed handshake, and shutting
             // the group down is the only handle on it. Left open, sshd starts refusing the phone.
             let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
             do {
+                if server.isDemo { try await Demo.shared.serve() }
                 let auth = try Self.auth(for: server)
                 var settings = SSHClientSettings(
                     host: server.address,
@@ -75,12 +84,25 @@ final class Session: @unchecked Sendable {
                         Task { if let system = await Self.system(of: client) { detected(system) } }
                         try await withThrowingTaskGroup(of: Void.self) { tasks in
                             tasks.addTask {
+                                var size = (cols: max(cols, 1), rows: max(rows, 1))
                                 for await event in events {
                                     switch event {
                                     case .data(let bytes):
                                         try await outbound.write(ByteBuffer(bytes: bytes))
                                     case .resize(let cols, let rows):
+                                        size = (cols, rows)
                                         try await outbound.changeSize(cols: cols, rows: rows, pixelWidth: 0, pixelHeight: 0)
+                                    case .heartbeat:
+                                        try await outbound.changeSize(cols: size.cols, rows: size.rows, pixelWidth: 0, pixelHeight: 0)
+                                    }
+                                }
+                            }
+                            // Not to Windows: its ConPTY may repaint the screen on any resize, even to the same size.
+                            if server.system != "windows" {
+                                tasks.addTask {
+                                    while true {
+                                        try await Task.sleep(for: Self.heartbeat)
+                                        input.yield(.heartbeat)
                                     }
                                 }
                             }
@@ -133,7 +155,7 @@ final class Session: @unchecked Sendable {
             return .passwordBased(username: server.user, password: password)
         }
         guard let pem = Keychain.get("privateKey") else {
-            throw Failure(errorDescription: String(localized: "No private key: add one with the key button in the list, or give this device a password."))
+            throw Failure(errorDescription: String(localized: "No private key: add one under SSH key in this device's form, or give the device a password."))
         }
         return try keyAuth(user: server.user, pem: pem, passphrase: Keychain.get("passphrase"))
     }
@@ -178,12 +200,16 @@ private final class PinValidator: NIOSSHClientServerAuthenticationDelegate, @unc
         // What `ssh-keygen -lf` prints: unpadded base64 of SHA-256 over the key's wire encoding.
         let digest = Data(SHA256.hash(data: Data(buffer.readableBytesView))).base64EncodedString()
         let fingerprint = "SHA256:" + digest.replacingOccurrences(of: "=", with: "")
-        if let pinned = Pins.get(pinKey), pinned != fingerprint {
-            presented = fingerprint
-            validationCompletePromise.fail(Session.Failure(errorDescription: "host key mismatch"))
-            return
+        // On the main thread, with every other use of the pins: each connection has a thread of its own, and two
+        // first handshakes at once each wrote back the whole set, so one pin was lost.
+        DispatchQueue.main.async { [self] in
+            if let pinned = Pins.get(pinKey), pinned != fingerprint {
+                presented = fingerprint
+                validationCompletePromise.fail(Session.Failure(errorDescription: "host key mismatch"))
+                return
+            }
+            Pins.set(pinKey, fingerprint)
+            validationCompletePromise.succeed(())
         }
-        Pins.set(pinKey, fingerprint)
-        validationCompletePromise.succeed(())
     }
 }

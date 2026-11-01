@@ -53,6 +53,7 @@ final class BackupTests: XCTestCase {
     /// A key a later version drops, or a hand-edited list, leaves the rest of the bar standing.
     func testBarKeysSkipUnknownOnes() {
         XCTAssertEqual(BarKey.list("esc,gone,,enter"), [.esc, .enter])
+        XCTAssertEqual(BarKey.list("esc,tab,esc"), [.esc, .tab], "a key twice is one row")
         XCTAssertEqual(BarKey.list(BarKey.store(BarKey.standard)), BarKey.standard)
     }
 

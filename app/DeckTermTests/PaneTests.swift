@@ -47,6 +47,17 @@ final class PaneTests: XCTestCase {
         sessions.sync([])
     }
 
+    /// A dropped connection keeps its pane, for Enter, but no longer keeps the app running in the background.
+    @MainActor func testOnlyLiveConnectionsKeepTheAppRunning() async throws {
+        let sessions = Sessions()
+        sessions.show(Server(name: "refused", address: "127.0.0.1", port: 1, user: "nobody"))
+        XCTAssertEqual(sessions.alive, ["refused"], "connecting counts")
+        for _ in 0..<50 where !sessions.alive.isEmpty { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertEqual(sessions.alive, [])
+        XCTAssertEqual(sessions.open.count, 1, "the pane stays")
+        sessions.sync([])
+    }
+
     /// Port 1 refuses at once: the panes stay open with an error, and nothing logs in.
     @MainActor func testTabsAndPanes() throws {
         let sessions = Sessions()
