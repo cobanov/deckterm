@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy Policy | DeckTerm</title>
-<meta name="description" content="DeckTerm collects no personal data. What stays on your iPhone, how backups and tips work, and how to reach the developer.">
+<meta name="description" content="DeckTerm collects no personal data. What stays on your device, how backups and tips work, and how to reach the developer.">
 <link rel="canonical" href="https://deckterm.cobanov.dev/privacy">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DeckTerm">
 <meta property="og:title" content="DeckTerm Privacy Policy">
-<meta property="og:description" content="DeckTerm collects no personal data. What stays on your iPhone, how backups and tips work, and how to reach the developer.">
+<meta property="og:description" content="DeckTerm collects no personal data. What stays on your device, how backups and tips work, and how to reach the developer.">
 <meta property="og:url" content="https://deckterm.cobanov.dev/privacy">
 <meta property="og:image" content="https://deckterm.cobanov.dev/img/og.png">
 <meta property="og:image:alt" content="The DeckTerm icon: a green prompt sign that opens on a hinge, like a cyberdeck lid, on black.">
@@ -37,30 +37,31 @@
 <main id="main" class="wrap">
   <article class="prose">
     <h1>Privacy Policy</h1>
-    <p class="meta">Effective October 29, 2026</p>
-    <p class="intro">DeckTerm is an SSH terminal for iPhone. It collects no personal data. This policy explains what the app keeps on your phone, what leaves it, and how this website and support email work.</p>
+    <p class="meta">Effective October 31, 2026</p>
+    <p class="intro">DeckTerm is an SSH terminal for iPhone and iPad. It collects no personal data. This policy explains what the app keeps on your device, what leaves it, and how this website and support email work.</p>
 
     <h2 id="summary">In short</h2>
     <ul>
       <li>No accounts, analytics, advertising or tracking.</li>
-      <li>No servers of the developer's own. The app connects only to the SSH servers you add, directly from your phone.</li>
+      <li>No servers of the developer's own. The app connects only to the SSH servers you add, directly from your device.</li>
       <li>No third-party SDKs, other than the open-source libraries listed on the <a href="/licenses">licenses page</a>, none of which send data anywhere.</li>
     </ul>
 
-    <h2 id="on-device">What stays on your phone</h2>
-    <p>Everything the app stores is kept on your iPhone:</p>
+    <h2 id="on-device">What stays on your device</h2>
+    <p>Everything the app stores is kept on your iPhone or iPad:</p>
     <ul>
-      <li>Your saved devices (name, address, port, user name, and which operating system each one runs), pinned host key fingerprints, snippets, and your theme and font choices are kept in the app's own storage on the phone.</li>
-      <li>Passwords and your private key are kept in the iOS Keychain, marked this-device-only. They are not synced to iCloud Keychain and are not moved to another phone.</li>
+      <li>Your saved devices (name, address, port, user name, and which operating system each one runs), pinned host key fingerprints, snippets, and your theme and font choices are kept in the app's own storage on the device.</li>
+      <li>Passwords and your private key are kept in the iOS Keychain, marked this-device-only. They are not synced to iCloud Keychain and are not moved to another device.</li>
     </ul>
     <p>None of this is sent to the developer or anyone else. The only network connections the app makes are the SSH connections you start, and App Store purchases handled by Apple.</p>
     <p>To show each device's logo, DeckTerm runs one short command on the server after you connect, <code>uname -s; cat /etc/os-release</code>, and keeps only the name of the system it finds. Like any command, it may appear in the server's own logs.</p>
+    <p>The Files panel moves files over that same SSH connection: a file you upload goes from your device straight to your server, and a file you download is handed to the iOS share sheet for you to save or send, then deleted from the app.</p>
 
     <h2 id="backups">Backups you make</h2>
     <p>You can export a backup file that holds your devices, pinned host key fingerprints, theme, font and snippets. Passwords and the private key are never included. Exporting is always your decision, and where the file goes (Files, iCloud Drive, AirDrop or anywhere else) is your choice. Once saved there, the file is handled under that service's terms. The developer never receives it.</p>
 
     <h2 id="device-backups">Apple device backups</h2>
-    <p>Apple's own iCloud or computer backups of your iPhone may include the app's settings, under Apple's terms. Keychain items marked this-device-only cannot be restored to a different phone.</p>
+    <p>Apple's own iCloud or computer backups of your iPhone or iPad may include the app's settings, under Apple's terms. Keychain items marked this-device-only cannot be restored to a different device.</p>
 
     <h2 id="tips">Tips</h2>
     <p>The optional tips are In-App Purchases processed by Apple. The developer never sees your name, payment details or Apple ID, and only receives Apple's aggregate sales reports.</p>
@@ -90,18 +91,42 @@
 
 <footer class="site-footer">
   <div class="wrap">
-    <nav aria-label="Footer">
-      <ul>
-        <li><a href="/privacy">Privacy</a></li>
-        <li><a href="/terms">Terms</a></li>
-        <li><a href="/security">Security</a></li>
-        <li><a href="/licenses">Licenses</a></li>
-        <li><a href="/support">Support</a></li>
-        <li><a href="mailto:deckterm@cobanov.dev">deckterm@cobanov.dev</a></li>
-      </ul>
-    </nav>
-    <p class="small">© 2026 Mert Cobanov</p>
-    <p class="small">iPhone is a trademark of Apple Inc., registered in the U.S. and other countries.</p>
+    <div class="foot">
+      <div class="about">
+        <img class="mark" src="/img/icon.svg" alt="" width="36" height="36">
+        <p>The SSH terminal for your cyberdeck.</p>
+        <p>Free, with an optional tip jar.</p>
+      </div>
+      <div>
+        <h2>Help</h2>
+        <ul>
+          <li><a href="/support">Support</a></li>
+          <li><a href="/support#setup">Add a server</a></li>
+          <li><a href="/support#shortcuts">Keyboard shortcuts</a></li>
+          <li><a href="/support#host-key">Host key warnings</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Legal</h2>
+        <ul>
+          <li><a href="/privacy">Privacy</a></li>
+          <li><a href="/terms">Terms</a></li>
+          <li><a href="/security">Security</a></li>
+          <li><a href="/licenses">Licenses</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Contact</h2>
+        <ul>
+          <li><a href="mailto:deckterm@cobanov.dev">deckterm@cobanov.dev</a></li>
+          <li><a href="/security#disclosure">Report a vulnerability</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="legal">
+      <span>Made by <a href="https://cobanov.dev">Mert Cobanov</a>, © 2026</span>
+      <span>iPhone and iPad are trademarks of Apple Inc., registered in the U.S. and other countries.</span>
+    </div>
   </div>
 </footer>
 </body>
