@@ -1,6 +1,6 @@
 // The hero's animation, built into public/hero as one script and one stylesheet the page links by name.
-// `npm run build` here after changing anything in this folder; the built files are committed, so deploying
-// stays `wrangler deploy` with no build step.
+// `npm run build` here after changing anything in this folder; the built files are committed, so the push to main
+// deploys them with no build step.
 import { defineConfig } from 'vite'
 
 export default defineConfig({

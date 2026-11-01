@@ -1,4 +1,5 @@
-// deckterm.cobanov.dev: static files only, no Worker code. Deploy with `wrangler deploy` from this folder.
+// deckterm.cobanov.dev: static files only, no Worker code. A push to main that touches site/ deploys it: Workers Builds
+// runs `npx wrangler deploy` in this folder. Running that here by hand still works.
 {
   "name": "deckterm-site",
   "compatibility_date": "2026-10-01",
